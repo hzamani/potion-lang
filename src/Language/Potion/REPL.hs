@@ -1,5 +1,7 @@
 module Language.Potion.REPL (repl) where
 
+import Prelude hiding (lookup)
+
 import Control.Monad.State.Strict
 import Data.Monoid
 -- import Data.Text.Lazy (Text)
@@ -11,11 +13,11 @@ import System.Console.Repline
 
 import Language.Potion.Parser
 import Language.Potion.Syntax
-import Language.Potion.Typing
+import Language.Potion.Type
+import Language.Potion.Type.Context
+import Language.Potion.Type.Infer
 
-newtype REPLState = RS
-  { typectx :: Context
-  }
+newtype REPLState = RS Context
 
 type REPL a = HaskelineT (StateT REPLState IO) a
 
@@ -28,15 +30,15 @@ hoistError (Left error) = do
 exec :: Bool -> String -> REPL ()
 exec update source =
   do
-    st <- get
+    (RS ctx) <- get
     expr <- hoistError $ parseExpression source
-    liftIO $ print $ typectx st
     liftIO $ print expr
-    typectx' <- hoistError $ inferDecl (typectx st) [("it", expr)]
-    let st' = st { typectx = typectx' <> typectx st }
-    liftIO $ print typectx'
-    when update (put st')
-    liftIO $ print $ typeof (typectx st') "it"
+    -- liftIO $ print ctx
+    -- liftIO $ print $ constraintsExpr ctx expr
+    ctx' <- hoistError $ inferDecl ctx [("it", expr)]
+    let st = RS $ ctx' <> ctx
+    when update (put st)
+    liftIO $ print $ lookup ctx' "it"
 
 cmd :: String -> REPL ()
 cmd = exec True
@@ -47,7 +49,7 @@ shell :: REPL a -> IO ()
 shell pre
   = flip evalStateT init $ evalRepl "Potion> " cmd [] completer pre
   where
-    init = RS emptyContext
+    init = RS base
 
 repl :: IO ()
 repl = shell $ return ()
