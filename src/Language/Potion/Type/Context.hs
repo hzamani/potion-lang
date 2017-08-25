@@ -19,18 +19,19 @@ empty = Context Map.empty
 
 base :: Context
 base = fromList
-  [ ("+", Forall [av] (TFunc aa a))
-  , ("-", Forall [av] (TFunc aa a))
-  , ("*", Forall [av] (TFunc aa a))
-  , ("/", Forall [av] (TFunc aa a))
-  , ("%", Forall [av] (TFunc aa a))
-  , ("succ", Forall [] (TFunc int int))
+  [ ("+", bin)
+  , ("-", bin)
+  , ("*", bin)
+  , ("/", bin)
+  , ("%", bin)
+  , ("::", bin)
+  , ("succ", Forall [] (tFun int int))
   ]
   where
-    int = TCon "Int"
-    aa = TTuple [a, a]
-    a = TVar av
-    av = TV "a"
+    av = TVar "a"
+    a = TV av
+    bin = Forall [av] (tFun (tTuple [a, a]) a)
+    int = TN "Int"
 
 extend :: Context -> (Name, Scheme) -> Context
 extend (Context schemes) (name, scheme)

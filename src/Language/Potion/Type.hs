@@ -5,29 +5,33 @@ import Data.List
 import Language.Potion.Syntax
 
 newtype TVar
-  = TV Name
+  = TVar Name
   deriving (Eq, Ord)
 
 instance Show TVar where
-  show (TV name) = name
+  show (TVar name) = name
 
 data Type
-  = TVar TVar
-  | TCon Name
-  | TList Type
-  | TMap Type Type
-  | TTuple [Type]
-  | TFunc Type Type
+  = TN Name
+  | TV TVar
+  | TApp Type [Type]
   deriving (Eq, Ord)
 
+tList a  = TApp (TN "List") [a]
+tFun a b = TApp (TN "Func") [a, b]
+tMap a b = TApp (TN "Map") [a, b]
+tTuple   = TApp (TN "Tuple")
+
 instance Show Type where
-  show (TVar var) = show var
-  show (TCon name) = name
-  show (TList a) = "[" ++ show a ++ "]"
-  show (TMap a b) = "{" ++ show a ++ ": " ++ show b ++ "}"
-  show (TTuple [t]) = show t
-  show (TTuple ts) = "(" ++ intercalate ", " (map show ts) ++ ")"
-  show (TFunc a b) = show a ++ " -> " ++ show b
+  show (TN name) = name
+  show (TV var) = show var
+  show (TApp (TN "Tuple") [t]) = show t
+  show (TApp (TN "Tuple") ts) = "(" ++ intercalate ", " (map show ts) ++ ")"
+  show (TApp (TN "List") [a]) = "[" ++ show a ++ "]"
+  show (TApp (TN "Func") [a, b]) = show a ++ " -> " ++ show b
+  show (TApp (TN "Map") [a, b]) = "{" ++ show a ++ ": " ++ show b ++ "}"
+  show (TApp con args@(_:_)) = show con ++ show args
+  show (TApp con args) = show con ++ "(" ++ intercalate ", " (map show args) ++ ")"
 
 data Scheme
   = Forall [TVar] Type
@@ -38,8 +42,8 @@ instance Show Scheme where
   show (Forall vars ty) = "Ɐ" ++ intercalate "," (map show vars) ++ ". " ++ show ty
 
 litteralType :: Literal -> Type
-litteralType (LB _) = TCon "Bool"
-litteralType (LI _) = TCon "Int"
-litteralType (LF _) = TCon "Float"
-litteralType (LC _) = TCon "Char"
-litteralType (LS _) = TCon "String"
+litteralType (LB _) = TN "Bool"
+litteralType (LI _) = TN "Int"
+litteralType (LF _) = TN "Float"
+litteralType (LC _) = TN "Char"
+litteralType (LS _) = TN "String"

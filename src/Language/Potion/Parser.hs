@@ -13,19 +13,20 @@ import qualified Text.Parsec.Token as Token
 import Language.Potion.Syntax
 
 potionDef :: Token.LanguageDef ()
-potionDef = Token.LanguageDef
-  { Token.commentStart    = "/*"
-  , Token.commentEnd      = "*/"
-  , Token.commentLine     = "//"
-  , Token.nestedComments  = False
-  , Token.identStart      = letter
-  , Token.identLetter     = alphaNum <|> oneOf "_?"
-  , Token.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Token.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
-  , Token.reservedNames   = ["true", "false"]
-  , Token.reservedOpNames = [".", "+", "-", "*", "/", "%", "#", "=>"]
-  , Token.caseSensitive   = True
-  }
+potionDef
+  = Token.LanguageDef
+    { Token.commentStart    = "/*"
+    , Token.commentEnd      = "*/"
+    , Token.commentLine     = "//"
+    , Token.nestedComments  = False
+    , Token.identStart      = letter
+    , Token.identLetter     = alphaNum <|> oneOf "_"
+    , Token.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
+    , Token.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
+    , Token.reservedNames   = ["true", "false"]
+    , Token.reservedOpNames = [".", "+", "-", "*", "/", "%", "#", "=>", "::"]
+    , Token.caseSensitive   = True
+    }
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser potionDef
@@ -41,6 +42,9 @@ parens = Token.parens lexer
 
 brackets :: Parser a -> Parser a
 brackets = Token.brackets lexer
+
+braces :: Parser a -> Parser a
+braces = Token.braces lexer
 
 reserved :: String -> Parser ()
 reserved = Token.reserved lexer
@@ -58,15 +62,16 @@ symbol :: String -> Parser String
 symbol = Token.symbol lexer
 
 table :: Exp.OperatorTable String () Identity Expression
-table =
-  [ [ bin "." ]
-  , [ pre "-" ]
-  , [ bin "*", bin "/", bin "%" ]
-  , [ bin "+", bin "-" ]
-  ]
+table
+  = [ [ bin "::" ]
+    , [ bin "." ]
+    , [ pre "-", pre "+" ]
+    , [ bin "*", bin "/", bin "%" ]
+    , [ bin "+", bin "-" ]
+    ]
   where
-    bin op = binary op (\x y -> App (Op op) [x, y]) Exp.AssocLeft
-    pre op = prefix op (\x   -> App (Op op) [x])
+    bin op = binary op (\x y -> EApp (EN op) [x, y]) Exp.AssocLeft
+    pre op = prefix op (\x   -> EApp (EN $ op ++ "/1") [x])
 
     prefix :: String -> (a -> a) -> Exp.Operator String () Identity a
     prefix op f = Exp.Prefix (reservedOp op >> return f)
@@ -75,42 +80,70 @@ table =
     binary op f = Exp.Infix (reservedOp op >> return f)
 
 operand :: Parser Expression
-operand =
-  parens expression
-  <|> Lit <$> literal
-  <|> funcLiteral
-  <|> Var <$> identifier
+operand
+  =   compositeExpression
+  <|> EL <$> literal
+  <|> EN <$> identifier
+  <|> fun
 
 primaryExpression :: Parser Expression
-primaryExpression =
-  do
+primaryExpression
+  = do
     base <- operand
-    composit' base
+    primary base
   where
-    composit' base = option base (composit'' base)
-    composit'' base =
+    primary base = option base (part base)
+    part base =
       do
-        f <- arguments <|> slice
-        composit' (f base)
+        base' <- arguments base <|> slice base <|> elements base
+        primary base'
 
-arguments :: Parser (Expression -> Expression)
-arguments = arguments' <?> "argument list"
+arguments :: Expression -> Parser Expression
+arguments base
+  = arguments' <?> "arguments"
   where
     arguments' =
       do
-        args <- parens $ commaSep expression
-        return $ \base -> App base args
+        args <- parens expressionList
+        return $ EApp base args
 
-slice :: Parser (Expression -> Expression)
-slice = slice' <?> "slice"
+slice :: Expression -> Parser Expression
+slice base
+  = slice' <?> "slice"
   where
     slice' =
       do
         index <- brackets expression
-        return $ \base -> App (Op "[]") [index]
+        return $ EApp (EN "[..]") [base, index]
+
+elements :: Expression -> Parser Expression
+elements base
+  = elements' <?> "elements"
+  where
+    elements'
+      = do
+        elems <- braces (commaSep element)
+        return $ EApp (EN "{}") (base:elems)
+
+    element :: Parser Expression
+    element
+      = do
+        key <- expression
+        option key (keyValue key)
+
+    keyValue key
+      = do
+        symbol ":"
+        val <- expression
+        return $ EApp (EN "()") [key, val]
 
 literal :: Parser Literal
-literal = bool <|> number <|> charLit <|> strLit <?> "literal"
+literal
+  =   bool
+  <|> number
+  <|> charLit
+  <|> strLit
+  <?> "literal"
   where
     charLit = LC <$> Token.charLiteral lexer
     strLit = LS <$> Token.stringLiteral lexer
@@ -119,28 +152,48 @@ literal = bool <|> number <|> charLit <|> strLit <?> "literal"
     false = const (LB False) <$> reserved "false"
     bool = true <|> false
 
-identifier :: Parser Name
-identifier = Token.identifier lexer <?> "identifier"
+compositeExpression :: Parser Expression
+compositeExpression
+  =   list
+  <|> tuple
+  <|> elements (EN "")
+  where
+    list = EApp (EN "[]") <$> brackets expressionList
+    tuple = do
+      list <- parens expressionList
+      return $ case list of
+        [x] -> x
+        xs  -> EApp (EN "()") xs
 
-funcLiteral :: Parser Expression
-funcLiteral =
-  do
+expressionList :: Parser [Expression]
+expressionList
+  = commaSep expression <?> "expression list"
+
+identifier :: Parser Name
+identifier
+  = Token.identifier lexer <?> "identifier"
+
+fun :: Parser Expression
+fun
+  = do
     reservedOp "#"
     args <- parens (commaSep identifier) <?> "parameters"
     reservedOp "=>"
     body <- expression
-    return $ Func args body
+    return $ EFun args body
 
 expression :: Parser Expression
-expression = Exp.buildExpressionParser table primaryExpression <?> "expression"
+expression
+  = Exp.buildExpressionParser table primaryExpression <?> "expression"
 
 contents :: Parser a -> Parser a
-contents p =
-  do
+contents p
+  = do
     whiteSpace
     result <- p
     eof
     return result
 
 parseExpression :: String -> Either ParseError Expression
-parseExpression = parse (contents expression) "<stdin>"
+parseExpression
+  = parse (contents expression) "<stdin>"

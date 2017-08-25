@@ -8,6 +8,8 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Identity
 
+
+import Data.Char (isUpper)
 import Data.Foldable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -107,7 +109,7 @@ fresh
   = do
     state <- get
     put state{count = count state + 1}
-    return $ TVar $ TV (letters !! count state)
+    return $ TV $ TVar (letters !! count state)
 
 instantiate :: Scheme -> Infer Type
 instantiate (Forall vars ty)
@@ -126,55 +128,77 @@ normalize :: Scheme -> Scheme
 normalize (Forall vars t)
   = Forall (fmap snd ord) (norm t)
   where
-    ord = zip (Set.elems $ free t) (fmap TV letters)
+    ord = zip (Set.elems $ free t) (fmap TVar letters)
 
-    norm (TList a)   = TList (norm a)
-    norm (TFunc a b) = TFunc (norm a) (norm b)
-    norm (TMap a b)  = TMap (norm a) (norm b)
-    norm (TTuple ts) = TTuple (map norm ts)
-    norm (TCon a)    = TCon a
-    norm (TVar a)    =
+    norm (TApp f as) = TApp (norm f) (map norm as)
+    norm (TN a)      = TN a
+    norm (TV a)      =
       case Prelude.lookup a ord of
-        Just x  -> TVar x
+        Just x  -> TV x
         Nothing -> error "type variable not in signature"
 
 infer :: Expression -> Infer (Type, [Constraint])
-infer (Lit lit)
+infer (EL lit)
   = return (litteralType lit, [])
 
-infer (Var x)
-  = do
-    ty <- lookupContext x
-    return (ty, [])
+infer (EN x)
+  = if isType x
+    then return (TN x, [])
+    else look x
+  where
+    look x = do
+      ty <- lookupContext x
+      return (ty, [])
 
-infer (Op op)
-  = do
-    ty <- lookupContext op
-    return (ty, [])
+    isType (x:_) = isUpper x
+    isType _ = False
 
-infer (Func names expr)
+infer (EFun names expr)
   = do
     vars <- mapM (const fresh) names
     let schemes = zipWith (\name tv -> (name, Forall [] tv)) names vars
     (out, c) <- withSchemes schemes (infer expr)
-    return (TFunc (TTuple vars) out, c)
+    return (tFun (tTuple vars) out, c)
 
-infer (Tuple exprs)
+infer (EApp (EN "[]") [])
+  = do
+    ty <- fresh
+    return (tList ty, [])
+
+infer (EApp (EN "[]") (x:xs))
+  = do
+    (ty, c) <- infer x
+    (_, cs) <- foldM inferStep (ty, c) xs
+    return (tList ty, cs)
+  where
+    inferStep (t, c) expr
+      = do
+        (ty, cs) <- infer expr
+        return (t, c ++ cs ++ [(ty, t)])
+
+-- infer (Op op)
+--   = do
+--     ty <- lookupContext op
+--     return (ty, [])
+
+infer (EApp (EN "()") exprs)
   = do
     (ts, cs) <- foldM inferStep ([], []) exprs
-    return (TTuple $ reverse ts, cs)
+    return (tTuple $ reverse ts, cs)
   where
     inferStep (ts, cs) expr
       = do
         (t, cs') <- infer expr
         return (t:ts, cs ++ cs')
 
-infer (App f args)
+infer (EApp f args)
   = do
     (tf, cf)   <- infer f
-    (tIn, cIn) <- infer (Tuple args)
+    (tIn, cIn) <- infer (tuple args)
     tOut       <- fresh
-    return (tOut, cf ++ cIn ++ [(tf, TFunc tIn tOut)])
+    return (tOut, cf ++ cIn ++ [(tf, tFun tIn tOut)])
+
+tuple = EApp (EN "()")
 
 inferDecl :: Context -> [(Name, Expression)] -> Either InferError Context
 inferDecl ctx []
@@ -203,17 +227,17 @@ unifyMany as bs = throwError $ UnificationMismatch as bs
 
 unifies :: Type -> Type -> Solve Substitution
 unifies t1 t2 | t1 == t2 = return Sb.empty
-unifies (TVar v) t = v `bind` t
-unifies t (TVar v) = v `bind` t
-unifies (TTuple [a]) (TCon b) = unifies a (TCon b)
-unifies (TCon a) (TTuple [b]) = unifies (TCon a) b
-unifies (TFunc in1 out1) (TFunc in2 out2) = unifyMany [in1, out1] [in2, out2]
-unifies (TTuple as) (TTuple bs) = unifyMany as bs
+-- unifies (TN a) (TN b) = convert a b -- TODO: add auto convertion
+unifies (TV v) t = v `bind` t
+unifies t (TV v) = v `bind` t
+unifies (TApp (TN "Tuple") [a]) (TN b) = unifies a (TN b)
+unifies (TN a) (TApp (TN "Tuple") [b]) = unifies (TN a) b
+unifies (TApp f as) (TApp f' as') = unifyMany (f:as) (f':as')
 unifies a b = throwError $ UnificationFail a b
 
 bind ::  TVar -> Type -> Solve Substitution
 bind a ty
-  | ty == TVar a  = return Sb.empty
+  | ty == TV a    = return Sb.empty
   | occursIn a ty = throwError $ InfiniteType a ty
   | otherwise     = return (Sub $ Map.singleton a ty)
 
