@@ -8,7 +8,6 @@ import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Identity
 
-
 import Data.Char (isUpper)
 import Data.Foldable
 import Data.Map.Strict (Map)
@@ -101,6 +100,7 @@ lookupContext name
       Nothing     -> throwError $ UnboundVariable name
       Just scheme -> instantiate scheme
 
+-- TODO: optimaize name generation
 letters :: [String]
 letters = [1..] >>= flip replicateM ['α'..'ω']
 
@@ -141,6 +141,11 @@ infer :: Expression -> Infer (Type, [Constraint])
 infer (EL lit)
   = return (litteralType lit, [])
 
+infer EPlace
+  = do
+    tv <- fresh
+    return (tv, [])
+
 infer (EN x)
   = if isType x
     then return (TN x, [])
@@ -153,12 +158,35 @@ infer (EN x)
     isType (x:_) = isUpper x
     isType _ = False
 
-infer (EFun names expr)
+infer (EFun idents expr)
   = do
-    vars <- mapM (const fresh) names
-    let schemes = zipWith (\name tv -> (name, Forall [] tv)) names vars
+    vars <- mapM (const fresh) idents
+    let schemes = zipWith (\ident tv -> (toName ident, Forall [] tv)) idents vars
     (out, c) <- withSchemes schemes (infer expr)
     return (tFun (tTuple vars) out, c)
+  where
+    toName (EN n) = n
+    toName _ = "_"
+
+infer (ELet pat val expr)
+  = do
+    let names = patNames pat
+    vars <- mapM (const fresh) names
+    let schemes = zipWith (\name var -> (name, Forall [] var)) names vars
+    (tp, cp) <- withSchemes schemes (infer pat)
+    (tv, cv) <- withSchemes schemes (infer val)
+    (te, ce) <- withSchemes schemes (infer expr)
+    return (te, cp ++ cv ++ ce ++ [(tp, tv)])
+
+infer (EApp (EN "do") (x:xs))
+  = do
+    (t1, c1) <- infer x
+    foldM inferStep (t1, c1) xs
+  where
+    inferStep (t, c) expr
+      = do
+        (ti, ci) <- infer expr
+        return (ti, c ++ ci)
 
 infer (EApp (EN "[]") [])
   = do
@@ -175,11 +203,6 @@ infer (EApp (EN "[]") (x:xs))
       = do
         (ty, cs) <- infer expr
         return (t, c ++ cs ++ [(ty, t)])
-
--- infer (Op op)
---   = do
---     ty <- lookupContext op
---     return (ty, [])
 
 infer (EApp (EN "()") exprs)
   = do
@@ -198,7 +221,30 @@ infer (EApp f args)
     tOut       <- fresh
     return (tOut, cf ++ cIn ++ [(tf, tFun tIn tOut)])
 
+infer (EMatch expr branches)
+  = do
+    (te, ce)     <- infer expr
+    tv           <- fresh
+    (_, cOut) <- foldM inferStep (tTuple [te, tv], ce) branches
+    return (tv, cOut)
+  where
+    inferStep (tt@(TApp (TN "Tuple") [tIn, tOut]), cs) (pat, when, expr)
+      = do
+        let names = patNames pat
+        vars <- mapM (const fresh) names
+        let schemes = zipWith (\name tv -> (name, Forall [] tv)) names vars
+        (tp, cp) <- withSchemes schemes (infer pat)
+        (tw, cw) <- withSchemes schemes (infer when)
+        (te, ce) <- withSchemes schemes (infer expr)
+        return (tt, cs ++ cp ++ ce ++ [(tp, tIn), (tw, TN "Bool"), (te, tOut)])
+
 tuple = EApp (EN "()")
+
+patNames :: Expression -> [Name]
+patNames EPlace = []
+patNames (EL _) = []
+patNames (EN name) = [name]
+patNames (EApp _ xs) = concatMap patNames xs
 
 inferDecl :: Context -> [(Name, Expression)] -> Either InferError Context
 inferDecl ctx []
@@ -227,7 +273,7 @@ unifyMany as bs = throwError $ UnificationMismatch as bs
 
 unifies :: Type -> Type -> Solve Substitution
 unifies t1 t2 | t1 == t2 = return Sb.empty
--- unifies (TN a) (TN b) = convert a b -- TODO: add auto convertion
+-- unifies (TN a) (TN b) = autoConvert a b -- TODO: add auto convertion
 unifies (TV v) t = v `bind` t
 unifies t (TV v) = v `bind` t
 unifies (TApp (TN "Tuple") [a]) (TN b) = unifies a (TN b)

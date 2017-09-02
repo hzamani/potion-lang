@@ -13,30 +13,32 @@ import System.Console.Repline
 
 import Language.Potion.Parser
 import Language.Potion.Syntax
+import Language.Potion.Expand
 import Language.Potion.Type
 import Language.Potion.Type.Context
 import Language.Potion.Type.Infer
 
-newtype REPLState = RS Context
+newtype REPLState = RSt Context
 
 type REPL a = HaskelineT (StateT REPLState IO) a
 
 hoistError :: Show e => Either e a -> REPL a
 hoistError (Right val) = return val
-hoistError (Left error) = do
-  liftIO $ print error
+hoistError (Left err) = do
+  liftIO $ print err
   abort
 
 exec :: Bool -> String -> REPL ()
 exec update source =
   do
-    (RS ctx) <- get
+    (RSt ctx) <- get
     expr <- hoistError $ parseExpression source
     liftIO $ print expr
     -- liftIO $ print ctx
     -- liftIO $ print $ constraintsExpr ctx expr
-    ctx' <- hoistError $ inferDecl ctx [("it", expr)]
-    let st = RS $ ctx' <> ctx
+    ctx' <- hoistError $ inferDecl ctx [("it", expand expr)]
+    let st = RSt $ ctx' <> ctx
+    -- liftIO $ print $ ctx' <> ctx
     when update (put st)
     liftIO $ print $ lookup ctx' "it"
 
@@ -49,7 +51,7 @@ shell :: REPL a -> IO ()
 shell pre
   = flip evalStateT init $ evalRepl "Potion> " cmd [] completer pre
   where
-    init = RS base
+    init = RSt base
 
 repl :: IO ()
 repl = shell $ return ()

@@ -1,46 +1,40 @@
 module Language.Potion.Syntax where
 
+import Language.Potion.Type
+
 type Name = String
 
 data Expression
   = EApp Expression [Expression]
-  | ECase [(Pattern, Expression)]
-  | EFun [Name] Expression
-  | ELet [(Pattern, Expression)] Expression
+  | EMatch Expression [(Expression, Expression, Expression)] -- (pattern, when, expr)
+  | EFun [Expression] Expression
   | EL Literal
   | EN Name
+  | EPlace
+  | ELet Expression Expression Expression -- (pattern, value, expr)
   deriving (Eq, Show)
 
-data Pattern
-  = PApp Pattern [Pattern] -- [1, 2] | ...test | Ctor(test)
-  | PAt Name Pattern       -- name@[a, ...]
-  | PLit Literal           -- 3 | "test" | 'c'
-  | PName Name             -- Ctor | {} | ...
-  | PWild                  -- _
-  deriving (Eq, Show)
+applyExpr f (EApp expr args) = EApp (applyExpr f expr) (map (applyExpr f) args)
+applyExpr f (EMatch expr cases) = EMatch (applyExpr f expr) (map (\(x,y,z) -> (applyExpr f x,applyExpr f y,applyExpr f z)) cases)
+applyExpr f (EFun params body) = EFun (map (applyExpr f) params) (applyExpr f body)
+applyExpr f expr = f expr
+
+replace x y
+  = applyExpr rep
+  where
+    rep expr = if expr == x then y else expr
 
 data Declaration
-  = DFun Name [Name] Expression
---   | DSpec Name Type
---   -- | DData
---   -- | DInterface
---   -- | DInstance
+  = DDef Name [Expression] Expression
+  | DSig Name Type
+  -- | DData Name Constructors
+  -- | DIFace Name Constraint [Declaration]
+  -- | DImpl Name Type Constraint [Declaration] -- interface type
   deriving (Eq, Show)
 
--- data BindGroup = BG Name [Pattern] Expression
-
--- data Expression
---   = Lit Literal
---   | List [Expression]
---   | Map [(Expression, Expression)]
---   | Var Name
---   | TName Name
---   | Op Name
---   | Func [Name] Expression
---   | Tuple [Expression]
---   | App Expression [Expression]
---   | Noop
---   deriving (Eq, Show)
+newtype SourceFile
+  = File [Declaration]
+  deriving (Eq, Show)
 
 data Literal
   = LB Bool
@@ -50,17 +44,23 @@ data Literal
   | LS String
   deriving (Eq, Show)
 
--- type Declaration = (Name, Expression)
+litteralType :: Literal -> Type
+litteralType (LB _) = TN "Bool"
+litteralType (LI _) = TN "Int"
+litteralType (LF _) = TN "Float"
+litteralType (LC _) = TN "Char"
+litteralType (LS _) = TN "String"
 
-data Program
-  = Program [Import] [(Access, Declaration)]
-  deriving (Eq, Show)
 
-data Access
-  = Private
-  | Public
-  deriving (Eq, Show)
+-- data Program
+--   = Program [Import] [(Access, Declaration)]
+--   deriving (Eq, Show)
 
-data Import
-  = Import Name Name -- import repo.module
-  deriving (Eq, Show)
+-- data Access
+--   = Private
+--   | Public
+--   deriving (Eq, Show)
+
+-- data Import
+--   = Import Name Name -- import repo.module
+--   deriving (Eq, Show)

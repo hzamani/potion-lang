@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Language.Potion.Parser
                      , Language.Potion.Syntax
+                     , Language.Potion.Expand
                      , Language.Potion.REPL
                      , Language.Potion.Type
                      , Language.Potion.Type.Context

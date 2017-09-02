@@ -102,17 +102,23 @@ table
     binary :: String -> (a -> a -> a) -> Exp.Assoc -> Exp.Operator String () Identity a
     binary op f = Exp.Infix (reservedOp op >> return f)
 
-operand :: Parser Expression
-operand
+operand :: Bool -> Parser Expression
+operand False
   =   compositeExpression
   <|> EL <$> literal
   <|> EN <$> identifier
   <|> fun
+  <|> doBlock
+  <|> match
 
-primaryExpression :: Parser Expression
-primaryExpression
+operand True
+  =   operand False
+  <|> const EPlace <$> reserved "_"
+
+primaryExpression :: Bool -> Parser Expression
+primaryExpression inPattern
   = do
-    base <- operand
+    base <- operand inPattern
     primary base
   where
     primary base = option base (part base)
@@ -196,18 +202,71 @@ identifier :: Parser Name
 identifier
   = Token.identifier lexer <?> "identifier"
 
+identifierOrPlace :: Parser Expression
+identifierOrPlace
+  = EN <$> identifier <|> place
+  where
+    place = const EPlace <$> symbol "_" <?> "placeholder"
+
 fun :: Parser Expression
 fun
   = do
-    reservedOp "#"
-    args <- parens (commaSep identifier) <?> "parameters"
-    reservedOp "=>"
-    body <- expression
-    return $ EFun args body
+    symbol "#"
+    choice [shorFun, simpleFun]
+  where
+    simpleFun = do
+      params <- parens (commaSep identifierOrPlace) <?> "parameters"
+      fatArrow
+      body <- expression
+      return $ EFun params body
+
+    shorFun = do
+      body <- between pipe pipe patter <?> "shortbody"
+      return $ EFun [EPlace] body
+
+    pipe = symbol "|"
+
+doBlock :: Parser Expression
+doBlock
+  = do
+    reserved "do"
+    exprs <- manyTill expression end
+    return $ EApp (EN "do") exprs
+
+end = reserved "end"
+
+fatArrow = reservedOp "=>"
+
+match :: Parser Expression
+match
+  = do
+      reserved "match"
+      expr <- expression
+      branches <- manyTill matchCase end
+      return $ EMatch expr branches
+
+matchCase :: Parser (Expression, Expression, Expression)
+matchCase
+  = do
+      reserved "with"
+      pat <- patter
+      pred <- option EPlace when
+      fatArrow
+      expr <- expression
+      return (pat, pred, expr)
+  where
+    when
+      = do
+          reserved "when"
+          expression
 
 expression :: Parser Expression
 expression
-  = Exp.buildExpressionParser table primaryExpression <?> "expression"
+  = Exp.buildExpressionParser table (primaryExpression False) <?> "expression"
+
+patter :: Parser Expression
+patter
+  = Exp.buildExpressionParser table (primaryExpression True) <?> "pattern"
 
 contents :: Parser a -> Parser a
 contents p
