@@ -1,4 +1,4 @@
-module Language.Potion.Parser (parseExpression) where
+module Language.Potion.Parser (parseExpression, parseFile) where
 
 import Data.Functor.Identity
 
@@ -276,6 +276,28 @@ contents p
     eof
     return result
 
+declaration :: Parser Declaration
+declaration
+  = def
+
+def :: Parser Declaration
+def
+  = do
+    reserved "def"
+    name <- identifier
+    params <- parens (commaSep identifierOrPlace) <?> "parameters"
+    body <- choice [shortDef, doBlock]
+    return $ DDef name params body
+  where
+    shortDef
+      = do
+        reservedOp "="
+        expression
+
 parseExpression :: String -> Either ParseError Expression
 parseExpression
   = parse (contents expression) "<stdin>"
+
+parseFile :: String -> String -> Either ParseError [Declaration]
+parseFile
+  = parse $ contents $ many declaration
