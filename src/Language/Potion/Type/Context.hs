@@ -25,13 +25,22 @@ base = fromList
   , ("/", bin)
   , ("%", bin)
   , ("::", bin)
+  , ("@", bin)
+  , (">", bool)
+  , (">=", bool)
+  , ("==", bool)
+  , ("!=", bool)
+  , ("<", bool)
+  , ("<=", bool)
   , ("succ", Forall [] (tFun int int))
   ]
   where
     av = TVar "a"
     a = TV av
-    bin = Forall [av] (tFun (tTuple [a, a]) a)
+    aa = tTuple [a, a]
     int = TN "Int"
+    bin = Forall [av] (tFun aa a)
+    bool = Forall [av] (tFun aa (TN "Bool"))
 
 extend :: Context -> (Name, Scheme) -> Context
 extend (Context schemes) (name, scheme)

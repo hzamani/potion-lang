@@ -23,10 +23,29 @@ potionDef
     , Token.identLetter     = alphaNum <|> oneOf "_"
     , Token.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
     , Token.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
-    , Token.reservedNames   = ["true", "false"]
-    , Token.reservedOpNames = [".", "+", "-", "*", "/", "%", "#", "=>", "::"]
+    , Token.reservedNames   = reservedNames
+    , Token.reservedOpNames = reservedOpNames
     , Token.caseSensitive   = True
     }
+
+reservedNames
+  = [ "true", "false"
+    , "def", "do", "end"
+    , "match", "with"
+    ]
+
+reservedOpNames
+  = [ "::"
+    , "#" , "=>"
+    , "="
+    , ">", ">=", "==", "<=", "<", "!="
+    , "@"
+    , "."
+    , "?"
+    , "-", "+"
+    , "*", "/", "%"
+    , "+", "-"
+    ]
 
 lexer :: Token.TokenParser ()
 lexer = Token.makeTokenParser potionDef
@@ -64,7 +83,11 @@ symbol = Token.symbol lexer
 table :: Exp.OperatorTable String () Identity Expression
 table
   = [ [ bin "::" ]
+    , [ bin "=" ]
+    , [ bin ">", bin ">=", bin "==", bin "<=", bin "<", bin "!=" ]
+    , [ bin "@" ]
     , [ bin "." ]
+    , [ bin "?" ]
     , [ pre "-", pre "+" ]
     , [ bin "*", bin "/", bin "%" ]
     , [ bin "+", bin "-" ]
