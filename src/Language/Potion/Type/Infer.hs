@@ -68,11 +68,13 @@ inferExpr ctx expr
     Right (ty, as, cs) ->
       case runSolve cs of
         Left err  -> Left err
-        Right sub -> Right (closeOver $ apply sub ty, apply sub as)
+        Right sub -> Right $ closeOver (apply sub ty, apply sub as)
+        -- Right sub -> Right (closeOver $ apply sub ty, apply sub as)
 
 -- | Canonicalize and return the polymorphic toplevel type
-closeOver :: Type -> Scheme
-closeOver = {- normalize . -} generalize base
+closeOver :: (Type, Apps) -> (Scheme, Apps)
+closeOver (ty, apps)
+  = normalize (generalize base ty, apps)
 
 -- | Return the internal constraints used in solving for the type of an expression
 constraintsExpr :: Context -> Expression -> Either InferError (Type, Apps, [Constraint])
@@ -126,16 +128,20 @@ generalize ctx ty
   where
     vars = Set.toList $ free ty `Set.difference` free ctx
 
-normalize :: Scheme -> Scheme
-normalize (Forall vars t)
-  = Forall (fmap snd ord) (norm t)
+normalize :: (Scheme, Apps) -> (Scheme, Apps)
+normalize (Forall vars ty, apps)
+  = (scheme, apps')
   where
-    ord = zip (Set.elems $ free t) (fmap TVar letters)
+    scheme = Forall (fmap snd cs) (norm ty)
+    apps' = Map.map (Set.map norm) apps
+
+    fs = free ty
+    cs = zip (Set.elems fs) (fmap TVar letters)
 
     norm (TApp f as) = TApp (norm f) (map norm as)
     norm (TN a)      = TN a
     norm (TV a)      =
-      case Prelude.lookup a ord of
+      case Prelude.lookup a cs of
         Just x  -> TV x
         Nothing -> error "type variable not in signature"
 
@@ -172,16 +178,6 @@ infer (EFun idents expr)
   where
     toName (EN n) = n
     toName _ = "_"
-
-infer (ELet pat val expr)
-  = do
-    let names = patNames pat
-    vars <- mapM (const fresh) names
-    let schemes = zipWith (\name var -> (name, Forall [] var)) names vars
-    (tp, ap, cp) <- withSchemes schemes (infer pat)
-    (tv, av, cv) <- withSchemes schemes (infer val)
-    (te, ae, ce) <- withSchemes schemes (infer expr)
-    return (te, muns [ap, av, ae], cp ++ cv ++ ce ++ [(tp, tv)])
 
 infer (EApp (EN "do") (x:xs))
   = do
@@ -224,10 +220,15 @@ infer (EApp f args)
     (tf, af, cf)    <- infer f
     (tIn, aIn, cIn) <- infer (tuple args)
     tOut            <- fresh
-    -- let app = case f of
-    --             (EN name) -> singletonApp name tf
-    --             _ -> af
-    return (tOut, af `mun` aIn, cf ++ cIn ++ [(tf, tFun tIn tOut)])
+    return (tOut, af `mun` aIn, concat [cf, cIn, [(tf, tFun tIn tOut)]])
+
+infer (ELet pat val expr)
+  = do
+    schemes      <- patternSchemes pat
+    (tp, ap, cp) <- withSchemes schemes (infer pat)
+    (tv, av, cv) <- withSchemes schemes (infer val)
+    (te, ae, ce) <- withSchemes schemes (infer expr)
+    return (te, muns [ap, av, ae], concat [cp, cv, ce, [(tp, tv)]])
 
 infer (EMatch expr branches)
   = do
@@ -238,21 +239,26 @@ infer (EMatch expr branches)
   where
     inferStep (tt@[tIn, tOut], as, cs) (pat, when, expr)
       = do
-        let names = patNames pat
-        vars <- mapM (const fresh) names
-        let schemes = zipWith (\name tv -> (name, Forall [] tv)) names vars
+        schemes      <- patternSchemes pat
         (tp, ap, cp) <- withSchemes schemes (infer pat)
         (tw, aw, cw) <- withSchemes schemes (infer when)
         (te, ae, ce) <- withSchemes schemes (infer expr)
-        return (tt, muns [ap, aw, ae], cs ++ cp ++ ce ++ [(tp, tIn), (tw, TN "Bool"), (te, tOut)])
+        return (tt, muns [as, ap, aw, ae], concat [cs, cp, cw, ce, [(tp, tIn), (tw, TN "Bool"), (te, tOut)]])
 
 tuple = EApp (EN "()")
 
-patNames :: Expression -> [Name]
-patNames EPlace      = []
-patNames (EL _)      = []
-patNames (EN name)   = [name]
-patNames (EApp _ xs) = concatMap patNames xs
+patternSchemes :: Expression -> Infer [(Name, Scheme)]
+patternSchemes pat
+  = do
+    let names = patNames pat
+    vars <- mapM (const fresh) names
+    return $ zipWith (\name tv -> (name, Forall [] tv)) names vars
+  where
+    patNames :: Expression -> [Name]
+    patNames EPlace      = []
+    patNames (EL _)      = []
+    patNames (EN name)   = [name]
+    patNames (EApp _ xs) = concatMap patNames xs
 
 inferDecl :: Context -> [(Name, Expression)] -> Either InferError Context
 inferDecl ctx []
