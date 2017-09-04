@@ -28,7 +28,7 @@ instance Show Type where
 
 data Scheme
   = Forall [TVar] Type
-  deriving Eq
+  deriving (Eq, Ord)
 
 instance Show Scheme where
   show (Forall [] ty) = show ty

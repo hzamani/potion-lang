@@ -56,26 +56,26 @@ type Solve a
   = ExceptT InferError Identity a
 
 -- | Run the inference monad
-runInfer :: Context -> Infer (Type, [Constraint]) -> Either InferError (Type, [Constraint])
+runInfer :: Context -> Infer (Type, Apps, [Constraint]) -> Either InferError (Type, Apps, [Constraint])
 runInfer ctx m
   = runExcept $ evalStateT (runReaderT m ctx) InferState{ count = 0 }
 
 -- | Solve for the toplevel type of an expression in a given context
-inferExpr :: Context -> Expression -> Either InferError Scheme
+inferExpr :: Context -> Expression -> Either InferError (Scheme, Apps)
 inferExpr ctx expr
   = case runInfer ctx (infer expr) of
     Left err       -> Left err
-    Right (ty, cs) ->
+    Right (ty, as, cs) ->
       case runSolve cs of
         Left err  -> Left err
-        Right sub -> Right $ closeOver $ apply sub ty
+        Right sub -> Right (closeOver $ apply sub ty, apply sub as)
 
 -- | Canonicalize and return the polymorphic toplevel type
 closeOver :: Type -> Scheme
-closeOver = normalize . generalize base
+closeOver = {- normalize . -} generalize base
 
 -- | Return the internal constraints used in solving for the type of an expression
-constraintsExpr :: Context -> Expression -> Either InferError (Type, [Constraint])
+constraintsExpr :: Context -> Expression -> Either InferError (Type, Apps, [Constraint])
 constraintsExpr ctx expr = runInfer ctx (infer expr)
 
 -- | Extend type context
@@ -92,13 +92,13 @@ withSchemes schemes
     scope ctx = foldl' ext ctx schemes
     ext ctx (name, scheme) = remove ctx name `extend` (name, scheme)
 
-lookupContext :: Name -> Infer Type
+lookupContext :: Name -> Infer (Type, Apps)
 lookupContext name
   = do
-    (Context schemes) <- ask
-    case Map.lookup name schemes of
-      Nothing     -> throwError $ UnboundVariable name
-      Just scheme -> instantiate scheme
+    (Context funs) <- ask
+    case Map.lookup name funs of
+      Nothing         -> throwError $ UnboundVariable name
+      Just (s, as, _) -> instantiate name s as
 
 -- TODO: optimaize name generation
 letters :: [String]
@@ -111,18 +111,20 @@ fresh
     put state{count = count state + 1}
     return $ TV $ TVar (letters !! count state)
 
-instantiate :: Scheme -> Infer Type
-instantiate (Forall vars ty)
+instantiate :: Name -> Scheme -> Apps -> Infer (Type, Apps)
+instantiate name scheme@(Forall [] ty) apps = return (ty, apps)
+instantiate name scheme@(Forall vars ty) apps
   = do
     vars' <- mapM (const fresh) vars
     let sub = Sub $ Map.fromList $ zip vars vars'
-    return $ apply sub ty
+    let apps' = insertApp name ty apps
+    return (apply sub ty, apply sub apps')
 
 generalize :: Context -> Type -> Scheme
-generalize ctx t
-  = Forall vars t
+generalize ctx ty
+  = Forall vars ty
   where
-    vars = Set.toList $ free t `Set.difference` free ctx
+    vars = Set.toList $ free ty `Set.difference` free ctx
 
 normalize :: Scheme -> Scheme
 normalize (Forall vars t)
@@ -137,23 +139,26 @@ normalize (Forall vars t)
         Just x  -> TV x
         Nothing -> error "type variable not in signature"
 
-infer :: Expression -> Infer (Type, [Constraint])
+noApp :: Apps
+noApp = Map.empty
+
+infer :: Expression -> Infer (Type, Apps, [Constraint])
 infer (EL lit)
-  = return (litteralType lit, [])
+  = return (litteralType lit, noApp, [])
 
 infer EPlace
   = do
     tv <- fresh
-    return (tv, [])
+    return (tv, noApp, [])
 
 infer (EN x)
   = if isType x
-    then return (TN x, [])
-    else look x
+      then return (TN x, noApp, [])
+      else look x
   where
     look x = do
-      ty <- lookupContext x
-      return (ty, [])
+      (ty, as) <- lookupContext x
+      return (ty, as, [])
 
     isType (x:_) = isUpper x
     isType _ = False
@@ -162,8 +167,8 @@ infer (EFun idents expr)
   = do
     vars <- mapM (const fresh) idents
     let schemes = zipWith (\ident tv -> (toName ident, Forall [] tv)) idents vars
-    (out, c) <- withSchemes schemes (infer expr)
-    return (tFun (tTuple vars) out, c)
+    (out, apps, c) <- withSchemes schemes (infer expr)
+    return (tFun (tTuple vars) out, apps, c)
   where
     toName (EN n) = n
     toName _ = "_"
@@ -173,77 +178,80 @@ infer (ELet pat val expr)
     let names = patNames pat
     vars <- mapM (const fresh) names
     let schemes = zipWith (\name var -> (name, Forall [] var)) names vars
-    (tp, cp) <- withSchemes schemes (infer pat)
-    (tv, cv) <- withSchemes schemes (infer val)
-    (te, ce) <- withSchemes schemes (infer expr)
-    return (te, cp ++ cv ++ ce ++ [(tp, tv)])
+    (tp, ap, cp) <- withSchemes schemes (infer pat)
+    (tv, av, cv) <- withSchemes schemes (infer val)
+    (te, ae, ce) <- withSchemes schemes (infer expr)
+    return (te, muns [ap, av, ae], cp ++ cv ++ ce ++ [(tp, tv)])
 
 infer (EApp (EN "do") (x:xs))
   = do
-    (t1, c1) <- infer x
-    foldM inferStep (t1, c1) xs
+    (t1, a1, c1) <- infer x
+    foldM inferStep (t1, a1, c1) xs
   where
-    inferStep (t, c) expr
+    inferStep (t, a, c) expr
       = do
-        (ti, ci) <- infer expr
-        return (ti, c ++ ci)
+        (ti, ai, ci) <- infer expr
+        return (ti, a `mun` ai, c ++ ci)
 
 infer (EApp (EN "[]") [])
   = do
     ty <- fresh
-    return (tList ty, [])
+    return (tList ty, noApp, [])
 
 infer (EApp (EN "[]") (x:xs))
   = do
-    (ty, c) <- infer x
-    (_, cs) <- foldM inferStep (ty, c) xs
-    return (tList ty, cs)
+    (t1, a1, c1) <- infer x
+    (_, a, cs) <- foldM inferStep (t1, a1, c1) xs
+    return (tList t1, a, cs)
   where
-    inferStep (t, c) expr
+    inferStep (t, a, c) expr
       = do
-        (ty, cs) <- infer expr
-        return (t, c ++ cs ++ [(ty, t)])
+        (ty, as, cs) <- infer expr
+        return (t, a `mun` as, c ++ cs ++ [(ty, t)])
 
 infer (EApp (EN "()") exprs)
   = do
-    (ts, cs) <- foldM inferStep ([], []) exprs
-    return (tTuple $ reverse ts, cs)
+    (ts, as, cs) <- foldM inferStep ([], noApp, []) exprs
+    return (tTuple $ reverse ts, as, cs)
   where
-    inferStep (ts, cs) expr
+    inferStep (ts, as, cs) expr
       = do
-        (t, cs') <- infer expr
-        return (t:ts, cs ++ cs')
+        (t, as', cs') <- infer expr
+        return (t:ts, as `mun` as', cs ++ cs')
 
 infer (EApp f args)
   = do
-    (tf, cf)   <- infer f
-    (tIn, cIn) <- infer (tuple args)
-    tOut       <- fresh
-    return (tOut, cf ++ cIn ++ [(tf, tFun tIn tOut)])
+    (tf, af, cf)    <- infer f
+    (tIn, aIn, cIn) <- infer (tuple args)
+    tOut            <- fresh
+    -- let app = case f of
+    --             (EN name) -> singletonApp name tf
+    --             _ -> af
+    return (tOut, af `mun` aIn, cf ++ cIn ++ [(tf, tFun tIn tOut)])
 
 infer (EMatch expr branches)
   = do
-    (te, ce)     <- infer expr
+    (te, ae, ce) <- infer expr
     tv           <- fresh
-    (_, cOut) <- foldM inferStep (tTuple [te, tv], ce) branches
-    return (tv, cOut)
+    (_, as, cs)  <- foldM inferStep ([te, tv], ae, ce) branches
+    return (tv, as, cs)
   where
-    inferStep (tt@(TApp (TN "Tuple") [tIn, tOut]), cs) (pat, when, expr)
+    inferStep (tt@[tIn, tOut], as, cs) (pat, when, expr)
       = do
         let names = patNames pat
         vars <- mapM (const fresh) names
         let schemes = zipWith (\name tv -> (name, Forall [] tv)) names vars
-        (tp, cp) <- withSchemes schemes (infer pat)
-        (tw, cw) <- withSchemes schemes (infer when)
-        (te, ce) <- withSchemes schemes (infer expr)
-        return (tt, cs ++ cp ++ ce ++ [(tp, tIn), (tw, TN "Bool"), (te, tOut)])
+        (tp, ap, cp) <- withSchemes schemes (infer pat)
+        (tw, aw, cw) <- withSchemes schemes (infer when)
+        (te, ae, ce) <- withSchemes schemes (infer expr)
+        return (tt, muns [ap, aw, ae], cs ++ cp ++ ce ++ [(tp, tIn), (tw, TN "Bool"), (te, tOut)])
 
 tuple = EApp (EN "()")
 
 patNames :: Expression -> [Name]
-patNames EPlace = []
-patNames (EL _) = []
-patNames (EN name) = [name]
+patNames EPlace      = []
+patNames (EL _)      = []
+patNames (EN name)   = [name]
 patNames (EApp _ xs) = concatMap patNames xs
 
 inferDecl :: Context -> [(Name, Expression)] -> Either InferError Context
@@ -251,8 +259,22 @@ inferDecl ctx []
   = Right ctx
 inferDecl ctx ((name, expr):rest)
   = case inferExpr ctx expr of
-    Left err -> Left err
-    Right ty -> inferDecl (extend ctx (name, ty)) rest
+    Left err         -> Left err
+    Right (ty, apps) -> inferDecl (extendApps ctx (name, ty, apps)) rest
+
+extendApps :: Context -> (Name, Scheme, Apps) -> Context
+extendApps (Context funs) (name, scheme, apps)
+  = Context $ Map.insert name (scheme, apps, Set.empty) funsWithVariants
+  where
+    funsWithVariants = Map.foldlWithKey insertVariants funs apps
+
+    insertVariants :: Map Name Fun -> Name -> Set Type -> Map Name Fun
+    insertVariants funs name ty = Map.adjust (insertVariant ty) name funs
+
+    insertVariant :: Set Type -> Fun -> Fun
+    insertVariant ty (sc, as, vs) = (sc, as, Set.filter noFree ty `Set.union` vs)
+
+    noFree = (0 ==) . Set.size . free
 
 -- | Run the constraint solver
 runSolve :: [Constraint] -> Either InferError Substitution
@@ -295,3 +317,4 @@ solver (subs, cs) =
     ((a, b):rest) -> do
       sub <- unifies a b
       solver (sub `compose` subs, apply sub rest)
+

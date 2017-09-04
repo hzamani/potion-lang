@@ -45,6 +45,18 @@ instance Substitutable Context where
   apply sub (Context ctx) = Context $ Map.map (apply sub) ctx
   free (Context ctx) = free $ Map.elems ctx
 
+instance (Substitutable a, Substitutable b, Substitutable c) => Substitutable (a, b, c) where
+  apply sub (x, y, z) = (apply sub x, apply sub y, apply sub z)
+  free (x, _, _) = free x
+
+instance Substitutable a => Substitutable (Map k a) where
+  apply sub = Map.map (apply sub)
+  free = Set.unions . map free . Map.elems
+
+instance (Substitutable a, Ord a) => Substitutable (Set a) where
+  apply sub = Set.map (apply sub)
+  free = Set.unions . map free . Set.elems
+
 instance Substitutable a => Substitutable [a] where
   apply = fmap . apply
   free = foldr (Set.union . free) Set.empty
