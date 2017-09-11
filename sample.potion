@@ -1,0 +1,28 @@
+
+def id(x) = x
+
+def add(x, y) = id(x) + y
+
+def max(x, y) = if x > y then x else y
+
+def fact(n)
+  fac = #(product, count) =>
+    if count <= 1
+    then product
+    else recur(product * count, count - 1)
+
+  fac(1, n)
+end
+
+def main()
+  /* x = 10.0 */
+  /* y = 12.0 */
+  id("test")
+  /* add(1.0, 1.2) */
+  /* add(1, 2) */
+  /* max(x, y) */
+  fact(10)
+end
+
+
+// source --[parse]-> syntax --[expand & desugar]-> syntax --[infer]-> typed syntax (ie. context) --[codegen]-> source

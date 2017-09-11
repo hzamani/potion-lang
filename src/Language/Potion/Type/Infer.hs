@@ -172,14 +172,24 @@ infer (EN x)
 infer (EFun idents expr)
   = do
     vars <- mapM (const fresh) idents
-    let schemes = zipWith (\ident tv -> (toName ident, Forall [] tv)) idents vars
+    fun <- fresh
+    let schemes = ("recur", Forall [] fun) : zipWith (\ident tv -> (toName ident, Forall [] tv)) idents vars
     (out, apps, c) <- withSchemes schemes (infer expr)
-    return (tFun (tTuple vars) out, apps, c)
+    let funTy = tFun (tTuple vars) out
+    return (funTy, apps, c ++ [(fun, funTy)])
   where
     toName (EN n) = n
     toName _ = "_"
 
-infer (EApp (EN "do") (x:xs))
+infer (EApp (EN "%let%") [pat, val, expr])
+  = do
+    schemes      <- patternSchemes pat
+    (tp, ap, cp) <- withSchemes schemes (infer pat)
+    (tv, av, cv) <- withSchemes schemes (infer val)
+    (te, ae, ce) <- withSchemes schemes (infer expr)
+    return (te, muns [ap, av, ae], concat [cp, cv, ce, [(tp, tv)]])
+
+infer (EApp (EN "%block%") (x:xs))
   = do
     (t1, a1, c1) <- infer x
     foldM inferStep (t1, a1, c1) xs
@@ -221,14 +231,6 @@ infer (EApp f args)
     (tIn, aIn, cIn) <- infer (tuple args)
     tOut            <- fresh
     return (tOut, af `mun` aIn, concat [cf, cIn, [(tf, tFun tIn tOut)]])
-
-infer (ELet pat val expr)
-  = do
-    schemes      <- patternSchemes pat
-    (tp, ap, cp) <- withSchemes schemes (infer pat)
-    (tv, av, cv) <- withSchemes schemes (infer val)
-    (te, ae, ce) <- withSchemes schemes (infer expr)
-    return (te, muns [ap, av, ae], concat [cp, cv, ce, [(tp, tv)]])
 
 infer (EMatch expr branches)
   = do

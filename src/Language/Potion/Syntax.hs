@@ -6,23 +6,22 @@ type Name = String
 
 data Expression
   = EApp Expression [Expression]
-  | EMatch Expression [(Expression, Expression, Expression)] -- (pattern, when, expr)
   | EFun [Expression] Expression
+  | EMatch Expression [(Expression, Expression, Expression)] -- (pattern, when, expr)
   | EL Literal
   | EN Name
   | EPlace
-  | ELet Expression Expression Expression -- (pattern, value, expr)
   deriving (Eq, Show)
 
-applyExpr f (EApp expr args) = EApp (applyExpr f expr) (map (applyExpr f) args)
-applyExpr f (EMatch expr cases) = EMatch (applyExpr f expr) (map (\(x,y,z) -> (applyExpr f x,applyExpr f y,applyExpr f z)) cases)
-applyExpr f (EFun params body) = EFun (map (applyExpr f) params) (applyExpr f body)
-applyExpr f expr = f expr
+-- applyExpr f (EApp expr args) = EApp (applyExpr f expr) (map (applyExpr f) args)
+-- applyExpr f (EMatch expr cases) = EMatch (applyExpr f expr) (map (\(x,y,z) -> (applyExpr f x,applyExpr f y,applyExpr f z)) cases)
+-- applyExpr f (EFun params body) = EFun (map (applyExpr f) params) (applyExpr f body)
+-- applyExpr f expr = f expr
 
-replace x y
-  = applyExpr rep
-  where
-    rep expr = if expr == x then y else expr
+-- replace x y
+--   = applyExpr rep
+--   where
+--     rep expr = if expr == x then y else expr
 
 data Declaration
   = DDef Name [Expression] Expression

@@ -9,7 +9,7 @@ import Language.Potion.Syntax
 goExp :: Expression -> Doc
 goExp (EN name) = text name
 goExp (EL x) = goLit x
-goExp (ELet pat val exp) = hsep [goExp pat, text ":=", goExp val] $+$ goExp exp
+-- goExp (ELet pat val exp) = hsep [goExp pat, text ":=", goExp val] $+$ goExp exp
 goExp (EApp f [x, y]) | isInfix f = hsep [goExp x, goExp f, goExp y]
 goExp (EApp f args) = goExp f <> tuple args
 goExp (EFun ps exp) =

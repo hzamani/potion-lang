@@ -30,12 +30,13 @@ potionDef
 
 reservedNames
   = [ "true", "false"
-    , "def", "do", "end"
+    , "def", "end"
     , "match", "with"
+    , "if", "then", "else"
     ]
 
 reservedOpNames
-  = [ "::"
+  = [ ":"
     , "#" , "=>"
     , "="
     , ">", ">=", "==", "<=", "<", "!="
@@ -108,8 +109,8 @@ operand False
   <|> EL <$> literal
   <|> EN <$> identifier
   <|> fun
-  <|> doBlock
   <|> match
+  <|> ifThen
 
 operand True
   =   operand False
@@ -226,12 +227,11 @@ fun
 
     pipe = symbol "|"
 
-doBlock :: Parser Expression
-doBlock
+block :: Parser Expression
+block
   = do
-    reserved "do"
     exprs <- manyTill expression end
-    return $ EApp (EN "do") exprs
+    return $ EApp (EN "%block%") exprs
 
 end = reserved "end"
 
@@ -260,6 +260,17 @@ matchCase
           reserved "when"
           expression
 
+ifThen :: Parser Expression
+ifThen
+  = do
+      reserved "if"
+      predicate <- expression
+      reserved "then"
+      onTrue <- expression
+      reserved "else"
+      onFalse <- expression
+      return $ EApp (EN "if") [predicate, onTrue, onFalse]
+
 expression :: Parser Expression
 expression
   = Exp.buildExpressionParser table (primaryExpression False) <?> "expression"
@@ -286,7 +297,7 @@ def
     reserved "def"
     name <- identifier
     params <- parens (commaSep identifierOrPlace) <?> "parameters"
-    body <- choice [shortDef, doBlock]
+    body <- choice [shortDef, block]
     return $ DDef name params body
   where
     shortDef

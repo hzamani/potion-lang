@@ -7,22 +7,21 @@ import Debug.Trace
 debug message val = trace (message ++ show val) val
 
 expand :: Expression -> Expression
-expand (EApp (EN "do") exprs) = addLets $ map expand exprs
-expand (EApp (EN "?") [p, EApp (EN "()") [t, f]]) = ifToMatch p t f
+expand (EApp (EN "%block%") exprs) = expandLet (map expand exprs)
+expand (EApp (EN "if") [p, t, f]) = expandIf p t f
 expand (EApp f args) = EApp (expand f) (map expand args)
 -- expand (EMatch expr clauses) = EMatch (expand expr) (map expandWith clauses)
-expand (EFun [EPlace] body) = EFun [it] (replace EPlace it body)
+-- expand (EFun [EPlace] body) = EFun [it] (replace EPlace it body)
 expand (EFun params expr) = EFun params (expand expr)
 expand expr = trace ("EXPAND NO OP: " ++ show expr) expr
 
-addLets :: [Expression] -> Expression
-addLets [EApp (EN "=") _] = error "Assigned but not used"
-addLets [expr] = expr
-addLets (EApp (EN "=") [pat, val] : rest) = ELet pat val (addLets rest)
-addLets (head : rest) = EApp (EN "do") [head, addLets rest]
+expandLet :: [Expression] -> Expression
+expandLet [expr] = expr
+expandLet (EApp (EN "=") [var, val] : rest) = EApp (EN "%let%") [var, val, expandLet rest]
+expandLet (head : rest) = EApp (EN "%block%") [head, expandLet rest]
 
-ifToMatch :: Expression -> Expression -> Expression -> Expression
-ifToMatch predicate onTrue onFalse =
+expandIf :: Expression -> Expression -> Expression -> Expression
+expandIf predicate onTrue onFalse =
   EMatch predicate
     [ (true, EPlace, onTrue)
     , (false, EPlace, onFalse)
