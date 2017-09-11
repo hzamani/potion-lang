@@ -82,15 +82,15 @@ symbol = Token.symbol lexer
 
 table :: Exp.OperatorTable String () Identity Expression
 table
-  = [ [ bin "::" ]
-    , [ bin "=" ]
-    , [ bin ">", bin ">=", bin "==", bin "<=", bin "<", bin "!=" ]
-    , [ bin "@" ]
-    , [ bin "." ]
-    , [ bin "?" ]
+  = [ [ bin "." ]
     , [ pre "-", pre "+" ]
     , [ bin "*", bin "/", bin "%" ]
     , [ bin "+", bin "-" ]
+    , [ bin ">", bin ">=", bin "==", bin "<=", bin "<", bin "!=" ]
+    , [ bin "?" ]
+    , [ bin "=" ]
+    , [ bin "@" ]
+    , [ bin "::" ]
     ]
   where
     bin op = binary op (\x y -> EApp (EN op) [x, y]) Exp.AssocLeft

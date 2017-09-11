@@ -1,0 +1,223 @@
+* Custom datatype
+* Higher order functions
+* Structs (Records)
+* Type synonyms
+* Interfaces
+
+* Parametric polymorphism
+* Pattern matching desugaring
+* Guards to distinguish sub-cases
+* Type signature must subsume inferred type
+* List, Tuple and Map syntactic sugar ( value/pattern syntax )
+* Recursive functions/datatypes
+* Type annotations
+* Arithmetic primops
+* Error handling sugar
+
+* Measure inference and checking
+* Pattern matching coverage
+* List comprehensions
+* Do-notation
+* Operator sections
+* Algebraic datatypes
+* Custom operators
+* Function Definition by pattern matching
+* Lazy evaluation
+* Monadic IO
+
+* Overloaded literals
+* GADTs
+* Polymorphic recursion
+* Foreign Function Interface
+
+// Comments
+as in Go
+
+// Semicolons?!?!
+
+// Identifier
+always start with lowercase letter
+
+// Literals
+same as go (litter differenses)
+
+// Vars
+nil?
+error?
+panic?
+pointers?
+how to call go functions?
+
+pointer -> Box(TypeName)
+interfaces -> Option(InterfaceName)
+
+import "io"
+import "log"
+import "net/http"
+
+def handler(w, r) do
+  w.writeHeader(http.statusOK)
+  w.write("this is a test")
+end
+
+def main() do
+  http.handle("/test", handler)
+  log.fatal(http.listenAndServe(":3000", Nil))
+end
+
+// Match
+
+match list
+with [a, ...] where a > 10
+  a
+with [a, b, ...] where a + b > 10
+  a + b
+else
+  -1
+end
+
+// Error
+
+import "net/http" (Request, ResponseWriter)
+
+module Encoding.Json
+  import "encoding/json"
+  
+  :: [Byte] -> Result(a, Error)
+  def decode(bytes) do
+    var value
+    error = unmarshal(bytes, value)
+    (value, error)
+  end
+  
+  :: a -> Result([Byte], Error)
+  def encode(value) = marshal(value)
+end
+
+module Net.Http
+  import "net/http"
+  
+  type Server GoHttp.ServerMux
+  
+  :: () -> Server
+  def new() = newServerMux()
+  
+  :: 
+  def handle
+end
+
+---
+def main() do
+  let mux = Http.newServerMux()
+  mux.handleFunc("/hello", #(res, req) -> IO.writeString(w, "Hi There!"))
+  Log.fatal(Http.listenAndServe(":3000", mux))
+end
+---
+def words : String -> [String]
+def words(str) do
+  match dropWhile(space?, str)
+  with ""
+    []
+  with trimed
+    (word, rest) = break(space?, trimed)
+    word : rec(rest)
+  end
+end
+---
+data Ordering = LT | EQ | GT
+
+interface Eq(a) => Ord(a)
+  sig compare(a, a) -> Ordering
+  sig gt (a, a) -> Bool
+  sig gte(a) -> Bool
+  sig lte(a) -> Bool
+  sig lt (a) -> Bool
+  sig max(a) -> a
+  sig min(a) -> a
+
+  def gt (x, y) = x.compare(y) == GT
+  def gte(y) = self.compare(y) != LT
+  def lte(y) = self.compare(y) != GT
+  def lt (y) = self.compare(y) == LT
+  def max(y) = self.gte(y) ? (self, y)
+  def min(y) = self.lte(y) ? (self, y)
+end
+
+implement Ord(a) => Ord(Array(a))
+  def (x).compare(y) do
+    match (x, y)
+    with ([], _) => LT
+    with (_, []) => GT
+    with ([x, ...xs], [y, ...ys]) =>
+      match x.compare(y)
+      with EQ  => recur(xs, ys)
+      with ord => ord
+      end
+    end
+  end
+end
+
+Array.sort(words) using caseInsensitiveOrd
+
+source --[parese]-> syntax --[expand/desugar]-> syntax --[typecheck]-> (syntax,shemes) --[generate]-> code
+------------------------------------
+desugaring
+? => if
+= => let
+#|_ + 1| => #(it) => it + 1
+
+patterns
+[] => len(a) == 0
+[x] => len(a) == 1                     prepend x := a[0]
+[y, 10] => len(a) == 2 && a[1] == 10   prepend y := a[10]
+------------------------------------
+
+:: (ResponseWriter, Request) -> ?
+def createPost(response, request)
+  json.newDecoder(request.body).decode(name)
+  request >>= decodeBody >>= validate >>= insert(db)
+end
+
+data Optional(a)
+  = Some(a)
+  | None
+
+match option
+with Some(n)
+  n
+with None
+  defaultValue
+end
+
+---
+data List(a)
+  = Cons(a, List(a))
+  | Empty
+---
+type List<a> struct {
+  ConsV1 *<a>
+  ConsV2 *List<a>
+  VList<a>1 *
+}
+---
+
+type Optional<a> struct {
+  SomeV1 *<a>
+  IsSomeOptional<a> bool
+  IsNoneOptional<a> bool
+}
+
+func SomeOptional<a>(x *<a>) Optional<a> {
+  OptionalInt{SomeV1: x, IsSomeOptional<a>: true}
+}
+
+func NoneOptional<a>() Optional<a> {
+  Optional<a>{IsNoneOptional<a>: true}
+}
+
+switch {
+  case option.IsSomeOptional<a>:
+    option.V<a>1()
+  case option.IsNoneOptional<a>:
+    defaultValue
+}

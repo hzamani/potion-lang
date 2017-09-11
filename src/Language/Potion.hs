@@ -1,8 +1,12 @@
 module Language.Potion (compile) where
 
 import System.Exit
+import Text.PrettyPrint
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Language.Potion.Syntax
+import Language.Potion.Codegen
 import Language.Potion.Expand
 import Language.Potion.Parser
 import Language.Potion.Type
@@ -21,8 +25,25 @@ compile file =
     source <- readFile file
     decls <- hoistError $ parseFile file source
     print decls
-    ctx <- hoistError $ inferDecl Ctx.base $ toNameExprPair decls
-    print ctx
+    let pairs = toNameExprPair decls
+    -- print pairs
+    ctx <- hoistError $ inferDecl Ctx.base pairs
+    -- print ctx
+    putStrLn "-----------------------------------------------"
+    putStrLn $ toGo ctx decls
+    putStrLn "-----------------------------------------------"
+
+toGo :: Ctx.Context -> [Declaration] -> String
+toGo ctx decls
+  = render $ vcat $ map go decls
+  where
+    go def@(DDef name _ _)
+      = vcat $ map (goDef def) $ ts name
+
+    ts name
+      = case Ctx.lookup ctx name of
+        Just (_, _, variants) -> Set.toList variants
+        Nothing -> []
 
 toNameExprPair :: [Declaration] -> [(Name, Expression)]
 toNameExprPair

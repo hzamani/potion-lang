@@ -1,0 +1,79 @@
+
+foreign JSON "encoding/json" do
+  type Decoder
+  implement Decoder do
+    sig buffered : () -> IO.Reader
+    sig decode : () -> Result(a, Error)
+    sig more : () -> Bool
+  end
+
+  sig decoder NewDecoder : IO.Reader -> Decoder
+
+  sig encode Marshal : a -> Result([Byte], Error)
+  sig decode Unmarshal : [Byte] -> Result(a, Error)
+end
+
+
+List => immutable liked list  [1, 2, 3]
+Hash => immutable hash map    {a: 1, b: 2}
+
+Array => mutable array        #[1, 2, 3]
+Map   => mutable map          #{}
+
+numbers = [1..10]
+def square(x) = x * x
+squares = numbers |> map(square)
+
+def computeDerivative(f, x) do
+  p1 = f(x - 0.05)
+  p2 = f(x + 0.05)
+  (p1 - p2) / 0.1
+end
+
+sig test1
+  : (a, a) -> a
+where
+  a : Num,Show
+def test1(x, y)
+  = show(x + y)
+
+sig sequence
+  : t(m(a)) -> m(t(a))
+where
+  t : Traversable
+  m : Monad
+
+interface Functor(f)
+where
+  f : Rank2
+do
+  sig map : (#(a) -> b, f(a)) -> f(b)
+end
+
+implement Functor(Array) do
+  def map(f, as) do
+    doMap = #(ys, xs) =>
+      match xs
+        with [] => ys
+        with [x, ...rest] => recur(append(ys, f(x)), rest)
+      end
+    doMap([], xs)
+  end
+end
+
+def getType(x) =
+  match x
+    with String => "is String"
+    with Int    => "is Int"
+    with Float  => "is Float"
+    else        => "is x"
+  end
+
+fibs =
+  [0..40]
+  |> Enum.chunk(4)
+  |> map(#|_ |> async fib|)
+  |> Async.run
+
+
+

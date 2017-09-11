@@ -20,6 +20,7 @@ library
                      , Language.Potion.Syntax
                      , Language.Potion.Expand
                      , Language.Potion.REPL
+                     , Language.Potion.Codegen
                      , Language.Potion.Type
                      , Language.Potion.Type.Context
                      , Language.Potion.Type.Infer
@@ -31,6 +32,7 @@ library
                      , haskeline
                      , repline
                      , containers
+                     , pretty
   default-language:    Haskell2010
 
 executable potion
