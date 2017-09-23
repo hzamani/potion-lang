@@ -7,6 +7,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Language.Potion.Syntax
 import Language.Potion.Type
 import Language.Potion.Type.Context
 
@@ -40,6 +41,19 @@ instance Substitutable Scheme where
       sub = Sub $ foldr Map.delete s vars
 
   free (Forall vars t) = Set.difference (free t) (Set.fromList vars)
+
+instance Substitutable Expression where
+  apply sub (ET e t) = ET (apply sub e) (apply sub t)
+  apply sub (EApp f args) = EApp (apply sub f) (apply sub args)
+  apply sub (EFun params exp) = EFun (apply sub params) (apply sub exp)
+  apply sub (EMatch exp branches) = EMatch (apply sub exp) (apply sub branches)
+  apply sub e = e
+
+  free (ET e t) = free e `Set.union` free t
+  free (EApp f args) = free f `Set.union` free args
+  free (EFun params exp) = free params `Set.union` free exp
+  free (EMatch exp branches) = free exp `Set.union` free branches
+  free e = Set.empty
 
 instance Substitutable Context where
   apply sub (Context ctx) = Context $ Map.map (apply sub) ctx

@@ -25,25 +25,36 @@ compile file =
     source <- readFile file
     decls <- hoistError $ parseFile file source
     print decls
-    let pairs = toNameExprPair decls
+    -- let pairs = toNameExprPair decls
     -- print pairs
-    ctx <- hoistError $ inferDecl Ctx.base pairs
+    (ctx, defs) <- hoistError $ inferDecl Ctx.base decls
+    -- putStrLn "-----------------------------------------------"
     -- print ctx
     putStrLn "-----------------------------------------------"
-    putStrLn $ toGo ctx decls
+    print defs
+    putStrLn "-----------------------------------------------"
+    -- print $ unifyDefs ctx defs
+    putStrLn $ toGo ctx defs
     putStrLn "-----------------------------------------------"
 
-toGo :: Ctx.Context -> [Declaration] -> String
-toGo ctx decls
-  = render $ vcat $ map go decls
-  where
-    go def@(DDef name _ _)
-      = vcat $ map (goDef def) $ ts name
+toGo :: Ctx.Context -> [Definition] -> String
+toGo ctx defs
+  = render $ vcat $ map goDef defs
+  -- where
+  --   go def@(name, exp)
+  --     = vcat $ map goDef def) $ ts name
 
-    ts name
-      = case Ctx.lookup ctx name of
-        Just (_, _, variants) -> Set.toList variants
-        Nothing -> []
+  --   -- define (name, ET exp scheme) ty =
+  --   --   case runSolve [(scheme, ty)] of
+  --   --     Left err  -> error (show err)
+  --   --     Right sub -> goDef (name, apply sub exp)
+
+  --   -- ts "main" = [tFun (tTuple []) (TN "Int")]
+  --   ts name
+  --     = case Ctx.lookup ctx name of
+  --       Just (Forall [] ty, _, variants) -> ty : Set.toList variants
+  --       Just (_, _, variants) -> Set.toList variants
+  --       Nothing -> []
 
 toNameExprPair :: [Declaration] -> [(Name, Expression)]
 toNameExprPair

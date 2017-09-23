@@ -14,11 +14,11 @@ foreign JSON "encoding/json" do
 end
 
 
-List => immutable liked list  [1, 2, 3]
-Hash => immutable hash map    {a: 1, b: 2}
+List => immutable liked list  #[1, 2, 3]
+Hash => immutable hash map    #{a: 1, b: 2}
 
-Array => mutable array        #[1, 2, 3]
-Map   => mutable map          #{}
+Array => mutable array        [1, 2, 3]
+Map   => mutable map          {a: 1, b: 2}
 
 numbers = [1..10]
 def square(x) = x * x
@@ -30,10 +30,7 @@ def computeDerivative(f, x) do
   (p1 - p2) / 0.1
 end
 
-sig test1
-  : (a, a) -> a
-where
-  a : Num,Show
+sig test1 : (a, a) -> a where a : Num,Show
 def test1(x, y)
   = show(x + y)
 

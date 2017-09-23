@@ -36,11 +36,11 @@ exec update source =
     liftIO $ print expr
     -- liftIO $ print ctx
     -- liftIO $ print $ constraintsExpr ctx expr
-    ctx' <- hoistError $ inferDecl ctx [("it", expand expr)]
-    let st = RSt $ ctx' <> ctx
-    -- liftIO $ print $ ctx' <> ctx
-    when update (put st)
-    liftIO $ print $ lookup ctx' "it"
+    -- ctx' <- hoistError $ inferDecl ctx [("it", expand expr)]
+    -- let st = RSt $ ctx' <> ctx
+    -- -- liftIO $ print $ ctx' <> ctx
+    -- when update (put st)
+    -- liftIO $ print $ lookup ctx' "it"
 
 cmd :: String -> REPL ()
 cmd = exec True

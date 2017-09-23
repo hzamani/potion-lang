@@ -1,24 +1,44 @@
 module Language.Potion.Codegen where
 
+import Data.Char (isAlpha)
 import Data.List
 import Text.PrettyPrint
 
 import Language.Potion.Type
 import Language.Potion.Syntax
 
-goExp :: Expression -> Doc
-goExp (EN name) = text name
-goExp (EL x) = goLit x
--- goExp (ELet pat val exp) = hsep [goExp pat, text ":=", goExp val] $+$ goExp exp
-goExp (EApp f [x, y]) | isInfix f = hsep [goExp x, goExp f, goExp y]
-goExp (EApp f args) = goExp f <> tuple args
-goExp (EFun ps exp) =
-  hsep [func, tuple ps, lbrace]
-  $+$ nest 4 (goExp exp)
+goExp :: [Expression] -> Expression -> Doc
+goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
+  = goExp ns exp
+  $+$ text "var unreachable" <+> goType ty
+  $+$ text "return unreachable"
+goExp ns (ET exp ty) = goExp ns exp
+goExp ns (EMatch exp branches)
+  = hsep [text "switch", goExp [] exp, lbrace]
+  $+$ nest 4 (goCases ns branches)
   $+$ rbrace
-goExp (EMatch exp branches) = text "switch"
+goExp ns (EApp (ET (EN "recur") _) args)
+  = hsep [tuple' ns, text "=", tuple' args]
+  $+$ text "goto start"
+goExp (_:_) exp = text "return" <+> goExp [] exp
+goExp ns (EN name) = text name
+goExp ns (EL x) = goLit x
+goExp ns (EApp f [x, y]) | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
+goExp ns (EApp f args) = goExp [] f <> tuple args
+goExp ns (EFun ps exp) =
+  hsep [func, tuple ps, lbrace]
+  $+$ nest 4 (goBody ps exp)
+  $+$ rbrace
+goExp _ e = error $ "goExp not implemented for: " ++ show e
 
-tuple = parens . commaSep . map goExp
+goCases ns
+  = vcat . map goCase
+  where
+    goCase (cond, ET EPlace _, exp) = text "case" <+> goExp [] cond <> text ":" $+$ nest 4 (goExp ns exp)
+    goCase x = text $ show x
+
+tuple = parens . commaSep . map (goExp [])
+tuple' = commaSep . map (goExp [])
 commaSep = hsep . punctuate comma
 
 goLit :: Literal -> Doc
@@ -29,25 +49,50 @@ goLit (LF x) = text $ show x
 goLit (LC c) = quotes $ char c
 goLit (LS s) = doubleQuotes $ text s
 
-goDef :: Declaration -> Type -> Doc
-goDef (DDef name params body) (TApp (TN "Fun") [paramTypes, outType])
+goDef :: Definition -> Doc
+goDef (name, ET (EFun params expr) (TApp (TN "Fun") [paramTypes, outType]))
   = hsep [func, text name, goParams params paramTypes, goType outType, lbrace]
-    $+$ nest 4 (goBody body)
+    $+$ nest 4 (goBody params expr)
     $+$ rbrace
+goDef e = error $ "goDef not implemented for: " ++ show e
+
+-- goDef :: Declaration -> Type -> Doc
+-- goDef (DDef name params body) (TApp (TN "Fun") [paramTypes, outType])
+--   = hsep [func, text name, goParams params paramTypes, goType outType, lbrace]
+--     $+$ nest 4 (goBody body)
+--     $+$ rbrace
 
 goParams :: [Expression] -> Type -> Doc
 goParams xs (TApp (TN "Tuple") ts)
   = parens $ commaSep $ zipWith goParam xs ts
   where
-    goParam x t = goExp x <+> goType t
+    goParam x t = goExp [] x <+> goType t
 
-goBody :: Expression -> Doc
-goBody (EApp (EN "do") es) = body es
-goBody exp = body [exp]
+goBody :: [Expression] -> Expression -> Doc
+-- goBody (EApp (EN "%block%") es) = body es
+goBody params exp = label $+$ body params [exp]
+  where
+    label =
+      if isRecur exp
+         then text "start:"
+         else empty
 
-body [] = empty
-body [x] = text "return" <+> goExp x
-body (x:xs) = goExp x $+$ body xs
+isRecur (ET expr _) = isRecur expr
+isRecur (EN "recur") = True
+isRecur (EApp expr _) = isRecur expr
+isRecur (EMatch _ cases) = any (\(_, _, e) -> isRecur e) cases
+isRecur (EFun _ expr) = isRecur expr
+isRecur _ = False
+
+body :: [Expression] -> [Expression] -> Doc
+body ps [] = empty
+-- body ps [ET e _] = body ps [e]
+-- body ps [EApp (ET (EN "recur") _) es] = hsep [tuple' ps, text ":=", tuple' es]
+body ps [ET (EApp (EN "%block%") es) _] = body ps es
+body ps [ET (EApp (EN "%let%") [x, v, e]) _] = hsep [goExp [] x, text ":=", goExp [] v] $+$ body ps [e]
+-- body ps e = error $ "BODY: " ++ show e
+body ps [x] = goExp ps x
+body ps (x:xs) = goExp [] x $+$ body ps xs
 
 goType :: Type -> Doc
 goType (TN "Bool") = text "bool"
@@ -65,8 +110,6 @@ goType (TV _) = error "can't use type vars in go!"
 func = text "func"
 
 isInfix :: Expression -> Bool
-isInfix (EN "+") = True
-isInfix (EN "-") = True
-isInfix (EN "*") = True
-isInfix (EN "=") = True
-isInfix _ = False
+isInfix (ET e _) = isInfix e
+isInfix (EN (x:_)) = not $ isAlpha x
+isInfix e = error $ "not for: " ++ show e

@@ -11,8 +11,15 @@ data Expression
   | EL Literal
   | EN Name
   | EPlace
+  | ET Expression Type
+  | ES Expression Scheme
   deriving (Eq, Show)
 
+typeof :: Expression -> Type
+typeof (ET _ ty) = ty
+typeof _ = TUnknown
+
+-- applyExpr f (ET expr _) = applyExpr f expr
 -- applyExpr f (EApp expr args) = EApp (applyExpr f expr) (map (applyExpr f) args)
 -- applyExpr f (EMatch expr cases) = EMatch (applyExpr f expr) (map (\(x,y,z) -> (applyExpr f x,applyExpr f y,applyExpr f z)) cases)
 -- applyExpr f (EFun params body) = EFun (map (applyExpr f) params) (applyExpr f body)
@@ -30,6 +37,8 @@ data Declaration
   -- | DIFace Name Constraint [Declaration]
   -- | DImpl Name Type Constraint [Declaration] -- interface type
   deriving (Eq, Show)
+
+type Definition = (Name, Expression)
 
 newtype SourceFile
   = File [Declaration]

@@ -12,6 +12,7 @@ instance Show TVar where
 data Type
   = TN String
   | TV TVar
+  | TUnknown
   | TApp Type [Type]
   deriving (Eq, Ord)
 
