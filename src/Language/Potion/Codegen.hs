@@ -12,7 +12,8 @@ goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
   = goExp ns exp
   $+$ text "var unreachable" <+> goType ty
   $+$ text "return unreachable"
-goExp ns (ET exp ty) = goExp ns exp
+goExp ns (ET exp ty)
+  = goExp ns exp
 goExp ns (EMatch exp branches)
   = hsep [text "switch", goExp [] exp, lbrace]
   $+$ nest 4 (goCases ns branches)
@@ -20,13 +21,20 @@ goExp ns (EMatch exp branches)
 goExp ns (EApp (ET (EN "recur") _) args)
   = hsep [tuple' ns, text "=", tuple' args]
   $+$ text "goto start"
-goExp (_:_) exp = text "return" <+> goExp [] exp
-goExp ns (EN name) = text name
-goExp ns (EL x) = goLit x
-goExp ns (EApp f [x, y]) | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
-goExp ns (EApp f args) = goExp [] f <> tuple args
-goExp ns (EFun ps exp) =
-  hsep [func, tuple ps, lbrace]
+goExp (_:_) exp
+  = text "return" <+> goExp [] exp
+goExp ns (EN name)
+  = text name
+goExp ns (EL x)
+  = goLit x
+goExp ns (EApp f [x, y])
+  | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
+goExp ns (EApp (ET (EN name) ty) args)
+  = text name <> tuple args
+goExp ns (EApp f args)
+  = goExp [] f <> tuple args
+goExp ns (EFun ps exp)
+  = hsep [func, tuple ps, lbrace]
   $+$ nest 4 (goBody ps exp)
   $+$ rbrace
 goExp _ e = error $ "goExp not implemented for: " ++ show e
@@ -51,7 +59,7 @@ goLit (LS s) = doubleQuotes $ text s
 
 goDef :: Definition -> Doc
 goDef (name, ET (EFun params expr) (TApp (TN "Fun") [paramTypes, outType]))
-  = hsep [func, text name, goParams params paramTypes, goType outType, lbrace]
+  = hsep [func, text name <> goParams params paramTypes, goType outType, lbrace]
     $+$ nest 4 (goBody params expr)
     $+$ rbrace
 goDef e = error $ "goDef not implemented for: " ++ show e
