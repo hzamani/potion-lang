@@ -88,9 +88,9 @@ rename (Sub sub) (UN name)
   where
     nt :: Type -> String
     nt (TN t) = t
+    nt (TApp (TN "Tuple") []) = ""
     nt (TApp (TN "Tuple") [t]) = nt t
-    nt (TApp (TN "Tuple") ts) = intercalate "_" $ map nt ts
-    nt (TApp (TN "List") [a]) = "List_" ++ nt a
-    nt (TApp (TN "Fun") [a, b]) = intercalate "_" ["Fun", nt a, nt b]
-    nt (TApp (TN "Map") [a, b]) = intercalate "_" ["Map", nt a, nt b]
+    nt (TApp (TN "Tuple") subtypes) = intercalate "_" $ map nt subtypes
+    nt (TApp (TN name) subtypes) = intercalate "_" $ name : map nt subtypes
+    nt t = error $ "(nt) not implemented for: " ++ show t
 

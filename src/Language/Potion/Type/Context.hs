@@ -38,11 +38,13 @@ base = fromList
   [ ("+", bin) , ("-", bin) , ("*", bin) , ("/", bin) , ("%", bin)
   , ("::", bin) , ("@", bin)
   , (">", bool) , (">=", bool) , ("==", bool) , ("!=", bool) , ("<", bool) , ("<=", bool)
+  , ("println", fun $ Forall [av] (tFun a unit))
   ]
   where
     av = TVar "a"
     a = TV av
     aa = tTuple [a, a]
+    unit = tTuple []
     int = TN "Int"
     bin = fun $ Forall [av] (tFun aa a)
     bool = fun $ Forall [av] (tFun aa (TN "Bool"))

@@ -9,7 +9,7 @@ import Control.Monad.Reader
 import Control.Monad.Identity
 
 import Data.Either.Combinators (mapRight)
-import Data.Char (isUpper)
+import Data.Char (isUpper, isAlpha)
 import Data.Foldable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -72,7 +72,6 @@ inferExpr ctx expr
       case runSolve cs of
         Left err  -> Left err
         Right sub -> Right $ closeOver (apply sub expr, apply sub as)
-        -- Right sub -> Right (closeOver $ apply sub ty, apply sub as)
 
 -- | Canonicalize and return the polymorphic toplevel type
 closeOver :: (Expression, Apps) -> (Expression, Scheme, Apps)
@@ -135,14 +134,14 @@ normalize :: (Expression, Scheme, Apps) -> (Expression, Scheme, Apps)
 normalize (expr, Forall vars ty, apps)
   = (expr', scheme, apps')
   where
-    scheme = Forall (fmap snd cs) (norm ty)
+    scheme = Forall (snd <$> cs) (norm ty)
     apps' = Map.map (Set.map norm) apps
-    expr' = normExp expr
+    expr' = walk normExp expr
 
     fs = free ty
     cs = zip (Set.elems fs) (fmap TVar letters)
 
-    normExp (ET e t) = ET (normExp e) (norm t)
+    normExp (ET e t) = ET e (norm t)
     normExp e = e
 
     norm (TApp f as) = TApp (norm f) (map norm as)
@@ -299,15 +298,16 @@ unifyDefs ctx
   = concatMap unified
   where
     unified (name, exp)
-      = map (unifyDef name $ unifyApps exp) $ defConstraints $ un name
+      = map (unifyApps . unifyDef name exp) $ defConstraints $ un name
 
     unifyDef name exp (scheme, ty)
       = case runSolve [(scheme, ty)] of
           Left err  -> error (show err)
           Right sub -> (rename sub name, ET (apply sub exp) ty)
 
-    unifyApps = walk unifyApp
-    unifyApp e@(ET (EN (UN name)) ty)
+    unifyApps (name, exp) = (name, walk unifyApp exp)
+    unifyApp e@(ET (EN (UN name@(h:_))) ty)
+      | isAlpha h
       = case Context.lookup ctx name of
           Just (Forall _ ty', _, _) ->
             case runSolve [(ty', ty)] of

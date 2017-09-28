@@ -9,11 +9,26 @@ import Language.Potion.Syntax
 import Language.Potion.Type.Context (Context)
 import qualified Language.Potion.Type.Context as Context
 
+toGo :: Context -> [Definition] -> String
+toGo ctx defs
+  = render $ vcat $ goHeader : map goDef defs
+
+goHeader :: Doc
+goHeader
+  = vcat
+    [ text "package main"
+    , text "import \"fmt\""
+    ]
+
 goExp :: [Expression] -> Expression -> Doc
 goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
   = goExp ns exp
-  $+$ text "var unreachable" <+> goType ty
-  $+$ text "return unreachable"
+  $+$ text "var απρόσιτος" <+> goType ty
+  $+$ text "return απρόσιτος"
+goExp ns (ET (EFun ps exp) (TApp (TN "Fun") [_, ty]))
+  = hsep [func, goFunParams ps, goType ty, lbrace]
+  $+$ nest 4 (goBody ps exp)
+  $+$ rbrace
 goExp ns (ET exp ty)
   = goExp ns exp
 goExp ns (EMatch exp branches)
@@ -31,14 +46,12 @@ goExp ns (EL x)
   = goLit x
 goExp ns (EApp f [x, y])
   | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
+goExp ns (EApp (ET (EN (PN "println" _)) _) args)
+  = text "fmt.Println" <> tuple args
 goExp ns (EApp (ET (EN name) ty) args)
   = goName name <> tuple args
 goExp ns (EApp f args)
   = goExp [] f <> tuple args
-goExp ns (EFun ps exp)
-  = hsep [func, tuple ps, lbrace]
-  $+$ nest 4 (goBody ps exp)
-  $+$ rbrace
 goExp _ e = error $ "goExp not implemented for: " ++ show e
 
 goCases ns
@@ -78,6 +91,12 @@ goParams xs (TApp (TN "Tuple") ts)
   where
     goParam x t = goExp [] x <+> goType t
 
+goFunParams :: [Expression] -> Doc
+goFunParams xs
+  = parens $ commaSep $ map goParam xs
+  where
+    goParam (ET x t) = goExp [] x <+> goType t
+
 goBody :: [Expression] -> Expression -> Doc
 -- goBody (EApp (EN "%block%") es) = body es
 goBody params exp = label $+$ body params [exp]
@@ -110,6 +129,7 @@ goType (TN "Int") = text "int"
 goType (TN "Float") = text "float64"
 goType (TN "Char") = text "rune"
 goType (TN "String") = text "string"
+goType (TApp (TN "Tuple") []) = empty
 goType (TApp (TN "Tuple") [t]) = goType t
 goType (TApp (TN "Tuple") ts) = parens $ hsep $ punctuate comma $ map goType ts
 goType (TApp (TN "List") [a]) = brackets $ goType a
@@ -118,12 +138,19 @@ goType (TApp (TN "Map") [a, b]) = hcat [text "map", brackets $ goType a, goType 
 goType (TV _) = error "can't use type vars in go!"
 
 goName :: Name -> Doc
-goName (UN name) = text name
-goName (PN name ts) = text $ intercalate "Ξ" (name : ts)
+goName (UN name)
+  = text name
+goName (PN name@(h:_) ts)
+  | isAlpha h
+  = text $ intercalate "Ξ" (name : ts)
+goName (PN name _)
+  = text name
 
 func = text "func"
 
 isInfix :: Expression -> Bool
 isInfix (ET e _) = isInfix e
 isInfix (EN (UN (x:_))) = not $ isAlpha x
-isInfix e = error $ "not for: " ++ show e
+isInfix (EN (PN (x:_) _)) = not $ isAlpha x
+isInfix e = error $ "isInfix not implemented for: " ++ show e
+
