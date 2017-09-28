@@ -31,6 +31,20 @@ un :: Name -> UserName
 un (UN name)   = name
 un (PN name _) = name
 
+eArray = EApp (en "[]")
+eMap   = EApp (en "{}")
+eFun   = EApp (en "#")
+eTuple = EApp (en "()")
+eList  = EApp (en "#[]")
+eHash  = EApp (en "#{}")
+
+eArrayT ty = EApp (ET (en "[]") ty)
+eMapT ty   = EApp (ET (en "{}") ty)
+eFunT ty   = EApp (ET (en "#") ty)
+eTupleT ty = EApp (ET (en "()") ty)
+eListT ty  = EApp (ET (en "#[]") ty)
+eHashT ty  = EApp (ET (en "#{}") ty)
+
 typeof :: Expression -> Type
 typeof (ET _ ty) = ty
 typeof _ = TUnknown

@@ -64,8 +64,8 @@ runInfer ctx m
   = runExcept $ evalStateT (runReaderT m ctx) InferState{ count = 0 }
 
 -- | Solve for the toplevel type of an expression in a given context
-inferExpr :: Context -> Expression -> Either InferError (Expression, Scheme, Apps)
-inferExpr ctx expr
+inferExp :: Context -> Expression -> Either InferError (Expression, Scheme, Apps)
+inferExp ctx expr
   = case runInfer ctx (infer expr) of
     Left err       -> Left err
     Right (expr, as, cs) ->
@@ -134,22 +134,22 @@ normalize :: (Expression, Scheme, Apps) -> (Expression, Scheme, Apps)
 normalize (expr, Forall vars ty, apps)
   = (expr', scheme, apps')
   where
-    scheme = Forall (snd <$> cs) (norm ty)
-    apps' = Map.map (Set.map norm) apps
-    expr' = walk normExp expr
+    scheme = Forall (snd <$> debug "CS    " cs) (norm (debug "TYPE  " ty))
+    apps'  = Map.map (Set.map norm) apps
+    expr'  = walk normExp expr
 
     fs = free ty
     cs = zip (Set.elems fs) (fmap TVar letters)
 
     normExp (ET e t) = ET e (norm t)
-    normExp e = e
+    normExp e        = e
 
     norm (TApp f as) = TApp (norm f) (map norm as)
     norm (TN a)      = TN a
     norm (TV a)      =
-      case Prelude.lookup a cs of
+      case Prelude.lookup (debug "VAR   " a) cs of
         Just x  -> TV x
-        Nothing -> error "type variable not in signature"
+        Nothing -> error $ "type variable not in signature: " ++ show (a, cs)
 
 noApp :: Apps
 noApp = Map.empty
@@ -204,69 +204,69 @@ infer (EApp (EN (UN "%let%")) [pat, val, expr])
 
 infer (EApp (EN (UN "%block%")) (x:xs))
   = do
-    (t1, a1, c1) <- infer x
-    (ts@(t:_), as, cs) <- foldM inferStep ([t1], a1, c1) xs
-    let typed = EApp (en "%block%") (reverse ts)
-    return (ET typed (typeof t), as, cs)
+    (e1, a1, c1) <- infer x
+    (es@(e:_), as, cs) <- foldM inferStep ([e1], a1, c1) xs
+    let typed = EApp (en "%block%") (reverse es)
+    return (ET typed (typeof e), as, cs)
   where
-    inferStep (ts, a, c) expr
+    inferStep (es, a, c) expr
       = do
-        (ti, ai, ci) <- infer expr
-        return (ti:ts, a `mun` ai, c ++ ci)
+        (ei, ai, ci) <- infer expr
+        return (ei:es, a `mun` ai, c ++ ci)
 
--- infer (EApp (EN "[]") [])
---   = do
---     ty <- fresh
---     return (tList ty, noApp, [])
-
--- infer (EApp (EN "[]") (x:xs))
---   = do
---     (t1, a1, c1) <- infer x
---     (_, a, cs) <- foldM inferStep (t1, a1, c1) xs
---     return (tList t1, a, cs)
---   where
---     inferStep (t, a, c) expr
---       = do
---         (ty, as, cs) <- infer expr
---         return (t, a `mun` as, c ++ cs ++ [(ty, t)])
-
-infer (EApp (EN (UN "()")) exprs)
+infer e@(EApp (EN (UN "[]")) [])
   = do
-    (es, ts, as, cs) <- foldM inferStep ([], [], noApp, []) exprs
+    ty <- fresh
+    return (ET e $ tArray ty, noApp, [])
+
+infer (EApp (EN (UN "[]")) (x:xs))
+  = do
+    (e1, a1, c1) <- infer x
+    let ty = typeof e1
+    (es, _, as, cs) <- foldM inferStep ([e1], ty, a1, c1) xs
+    let typed = eArrayT ty (reverse es)
+    return (ET typed (tArray ty), as, cs)
+  where
+    inferStep (es, ty, as, cs) exp
+      = do
+        (ei, ai, ci) <- infer exp
+        return (ei:es, ty, ai `mun` as, ci ++ cs ++ [(ty, typeof ei)])
+
+infer (EApp (EN (UN "()")) exps)
+  = do
+    (es, ts, as, cs) <- foldM inferStep ([], [], noApp, []) exps
     let ty = tTuple $ reverse ts
-    let typed = EApp (en "()") (reverse es)
+    let typed = eTuple $ reverse es
     return (ET typed ty, as, cs)
   where
-    inferStep (es, ts, as, cs) expr
+    inferStep (es, ts, as, cs) exp
       = do
-        (e, as', cs') <- infer expr
-        return (e:es, typeof e:ts, as `mun` as', cs ++ cs')
+        (ei, ai, ci) <- infer exp
+        return (ei:es, typeof ei:ts, as `mun` ai, cs ++ ci)
 
 infer (EApp f args)
   = do
     (tf, af, cf)                    <- infer f
-    (ET (EApp _ eIn) tIn, aIn, cIn) <- infer (tuple args)
+    (ET (EApp _ eIn) tIn, aIn, cIn) <- infer (eTuple args)
     tOut                            <- fresh
     let typed = EApp tf eIn
     return (ET typed tOut, af `mun` aIn, concat [cf, cIn, [(typeof tf, tFun tIn tOut)]])
 
-infer (EMatch expr branches)
+infer (EMatch exp branches)
   = do
-    (te, ae, ce) <- infer expr
-    tv           <- fresh
-    (_, bs, as, cs)  <- foldM inferStep ([typeof te, tv], [], ae, ce) branches
+    (te, ae, ce)    <- infer exp
+    tv              <- fresh
+    (_, bs, as, cs) <- foldM inferStep ([typeof te, tv], [], ae, ce) branches
     let typed = EMatch te $ reverse bs
     return (ET typed tv, as, cs)
   where
-    inferStep (tt@[tIn, tOut], bs, as, cs) (pat, when, expr)
+    inferStep (tt@[tIn, tOut], bs, as, cs) (pat, when, exp)
       = do
         schemes      <- patternSchemes pat
         (tp, ap, cp) <- withSchemes schemes (infer pat)
         (tw, aw, cw) <- withSchemes schemes (infer when)
-        (te, ae, ce) <- withSchemes schemes (infer expr)
+        (te, ae, ce) <- withSchemes schemes (infer exp)
         return (tt, (tp, tw, te):bs, muns [as, ap, aw, ae], concat [cs, cp, cw, ce, [(typeof tp, tIn), (typeof tw, TN "Bool"), (typeof te, tOut)]])
-
-tuple = EApp (en "()")
 
 patternSchemes :: Expression -> Infer [(UserName, Scheme)]
 patternSchemes pat
@@ -288,7 +288,7 @@ inferDecl ctx
   where
     finalize (ctx, defs) = (ctx, unifyDefs ctx $ reverse defs)
     step (Right (ctx, defs)) (DDef name params body)
-      = case inferExpr ctx $ expand $ EFun params body of
+      = case inferExp ctx $ expand $ EFun params body of
           Left err -> Left err
           Right (expr, scheme, apps) -> Right (extendApps ctx (un name, scheme, apps), (name, expr):defs)
     step left _ = left

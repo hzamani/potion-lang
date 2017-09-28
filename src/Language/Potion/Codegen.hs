@@ -20,6 +20,7 @@ goHeader
     , text "import \"fmt\""
     ]
 
+-- FIXME: return in function with no params
 goExp :: [Expression] -> Expression -> Doc
 goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
   = goExp ns exp
@@ -44,10 +45,12 @@ goExp ns (EN name)
   = goName name
 goExp ns (EL x)
   = goLit x
-goExp ns (EApp f [x, y])
-  | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
 goExp ns (EApp (ET (EN (PN "println" _)) _) args)
   = text "fmt.Println" <> tuple args
+goExp ns (EApp (ET (EN (UN "[]")) ty) args)
+  = text "[]" <> goType ty <> literal args
+goExp ns (EApp f [x, y])
+  | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
 goExp ns (EApp (ET (EN name) ty) args)
   = goName name <> tuple args
 goExp ns (EApp f args)
@@ -60,6 +63,7 @@ goCases ns
     goCase (cond, ET EPlace _, exp) = text "case" <+> goExp [] cond <> text ":" $+$ nest 4 (goExp ns exp)
     goCase x = text $ show x
 
+literal = braces . commaSep . map (goExp [])
 tuple = parens . commaSep . map (goExp [])
 tuple' = commaSep . map (goExp [])
 commaSep = hsep . punctuate comma
@@ -132,9 +136,9 @@ goType (TN "String") = text "string"
 goType (TApp (TN "Tuple") []) = empty
 goType (TApp (TN "Tuple") [t]) = goType t
 goType (TApp (TN "Tuple") ts) = parens $ hsep $ punctuate comma $ map goType ts
-goType (TApp (TN "List") [a]) = brackets $ goType a
-goType (TApp (TN "Fun") [a, b]) = hsep [func, parens $ goType a, goType b]
+goType (TApp (TN "Array") [a]) = text "[]" <> goType a
 goType (TApp (TN "Map") [a, b]) = hcat [text "map", brackets $ goType a, goType b]
+goType (TApp (TN "Fun") [a, b]) = hsep [func, parens $ goType a, goType b]
 goType (TV _) = error "can't use type vars in go!"
 
 goName :: Name -> Doc
