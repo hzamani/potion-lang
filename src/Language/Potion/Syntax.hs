@@ -19,16 +19,20 @@ typeof :: Expression -> Type
 typeof (ET _ ty) = ty
 typeof _ = TUnknown
 
--- applyExpr f (ET expr _) = applyExpr f expr
--- applyExpr f (EApp expr args) = EApp (applyExpr f expr) (map (applyExpr f) args)
--- applyExpr f (EMatch expr cases) = EMatch (applyExpr f expr) (map (\(x,y,z) -> (applyExpr f x,applyExpr f y,applyExpr f z)) cases)
--- applyExpr f (EFun params body) = EFun (map (applyExpr f) params) (applyExpr f body)
--- applyExpr f expr = f expr
+walk :: (Expression -> Expression) -> Expression -> Expression
+walk f (EApp exp args) = f $ EApp (walk f exp) (map (walk f) args)
+walk f (EMatch exp cases) = f $ EMatch (walk f exp) (map (walk3 f) cases)
+walk f (EFun params body) = f $ EFun (map (walk f) params) (walk f body)
+walk f (ET exp ty) = f $ ET (walk f exp) ty
+walk f exp = f exp
 
--- replace x y
---   = applyExpr rep
---   where
---     rep expr = if expr == x then y else expr
+walk3 f (a, b, c) = (walk f a, walk f b, walk f c)
+
+replace :: Expression -> Expression -> Expression -> Expression
+replace x y
+  = walk rep
+  where
+    rep exp = if debug "EXP   " exp == x then y else exp
 
 data Declaration
   = DDef Name [Expression] Expression
@@ -58,7 +62,6 @@ litteralType (LI _) = TN "Int"
 litteralType (LF _) = TN "Float"
 litteralType (LC _) = TN "Char"
 litteralType (LS _) = TN "String"
-
 
 -- data Program
 --   = Program [Import] [(Access, Declaration)]
