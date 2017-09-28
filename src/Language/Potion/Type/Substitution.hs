@@ -2,6 +2,8 @@
 
 module Language.Potion.Type.Substitution where
 
+import Data.Char (isAlpha)
+import Data.List (intercalate)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -77,3 +79,18 @@ instance Substitutable a => Substitutable [a] where
 
 occursIn :: Substitutable a => TVar -> a -> Bool
 occursIn var ty = var `Set.member` free ty
+
+rename :: Substitution -> Name -> Name
+rename (Sub sub) (UN name)
+  = case Map.elems sub of
+      [] -> UN name
+      ts -> PN name (map nt ts)
+  where
+    nt :: Type -> String
+    nt (TN t) = t
+    nt (TApp (TN "Tuple") [t]) = nt t
+    nt (TApp (TN "Tuple") ts) = intercalate "_" $ map nt ts
+    nt (TApp (TN "List") [a]) = "List_" ++ nt a
+    nt (TApp (TN "Fun") [a, b]) = intercalate "_" ["Fun", nt a, nt b]
+    nt (TApp (TN "Map") [a, b]) = intercalate "_" ["Map", nt a, nt b]
+

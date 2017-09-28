@@ -13,14 +13,14 @@ import Language.Potion.Syntax
 import Language.Potion.Type
 
 type Variants = Set Type
-type Apps = Map Name (Set Type)
+type Apps = Map UserName (Set Type)
 type Fun = (Scheme, Apps, Variants)
 
 newtype Context
-  = Context (Map Name Fun)
+  = Context (Map UserName Fun)
   deriving (Eq, Show)
 
-insertApp :: Name -> Type -> Apps -> Apps
+insertApp :: UserName -> Type -> Apps -> Apps
 insertApp name ty
   = Map.insertWith Set.union name (Set.singleton ty)
 
@@ -50,19 +50,19 @@ base = fromList
 fun :: Scheme -> Fun
 fun scheme = (scheme, Map.empty, Set.empty)
 
-extend :: Context -> (Name, Scheme) -> Context
+extend :: Context -> (UserName, Scheme) -> Context
 extend (Context funs) (name, scheme)
   = Context $ Map.insert name (fun scheme) funs
 
-extends :: Context -> [(Name, Scheme)] -> Context
+extends :: Context -> [(UserName, Scheme)] -> Context
 extends (Context funs) vars
   = Context $ Map.union (Map.map fun $ Map.fromList vars) funs
 
-remove :: Context -> Name -> Context
+remove :: Context -> UserName -> Context
 remove (Context funs) name
   = Context $ Map.delete name funs
 
-lookup :: Context -> Name -> Maybe Fun
+lookup :: Context -> UserName -> Maybe Fun
 lookup (Context funs) name
   = Map.lookup name funs
 
@@ -73,18 +73,18 @@ merge (Context a) (Context b)
 merges :: [Context] -> Context
 merges = foldl' merge empty
 
-singleton :: Name -> Scheme -> Context
+singleton :: UserName -> Scheme -> Context
 singleton name scheme
   = Context $ Map.singleton name (fun scheme)
 
-names :: Context -> [Name]
+names :: Context -> [UserName]
 names (Context funs)
   = Map.keys funs
 
-fromList :: [(Name, Fun)] -> Context
+fromList :: [(UserName, Fun)] -> Context
 fromList = Context . Map.fromList
 
-toList :: Context -> [(Name, Fun)]
+toList :: Context -> [(UserName, Fun)]
 toList (Context funs) = Map.toList funs
 
 instance Monoid Context where

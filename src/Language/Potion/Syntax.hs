@@ -1,8 +1,18 @@
 module Language.Potion.Syntax where
 
+import Debug.Trace
+
 import Language.Potion.Type
 
-type Name = String
+debug :: Show a => String -> a -> a
+debug msg x = trace (msg ++ ": " ++ show x) x
+
+type UserName = String
+
+data Name
+  = UN UserName          -- user name
+  | PN UserName [String] -- parametric name
+  deriving (Eq, Ord, Show)
 
 data Expression
   = EApp Expression [Expression]
@@ -12,8 +22,14 @@ data Expression
   | EN Name
   | EPlace
   | ET Expression Type
-  | ES Expression Scheme
   deriving (Eq, Show)
+
+en :: String -> Expression
+en = EN . UN
+
+un :: Name -> UserName
+un (UN name)   = name
+un (PN name _) = name
 
 typeof :: Expression -> Type
 typeof (ET _ ty) = ty
@@ -32,7 +48,7 @@ replace :: Expression -> Expression -> Expression -> Expression
 replace x y
   = walk rep
   where
-    rep exp = if debug "EXP   " exp == x then y else exp
+    rep exp = if exp == x then y else exp
 
 data Declaration
   = DDef Name [Expression] Expression

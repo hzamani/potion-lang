@@ -94,8 +94,8 @@ table
     , [ bin "::" ]
     ]
   where
-    bin op = binary op (\x y -> EApp (EN op) [x, y]) Exp.AssocLeft
-    pre op = prefix op (\x   -> EApp (EN $ op ++ "/1") [x])
+    bin op = binary op (\x y -> EApp (en op) [x, y]) Exp.AssocLeft
+    pre op = prefix op (\x   -> EApp (en $ op ++ "/1") [x])
 
     prefix :: String -> (a -> a) -> Exp.Operator String () Identity a
     prefix op f = Exp.Prefix (reservedOp op >> return f)
@@ -144,7 +144,7 @@ slice base
     slice' =
       do
         index <- brackets expression
-        return $ EApp (EN "[..]") [base, index]
+        return $ EApp (en "[..]") [base, index]
 
 elements :: Expression -> Parser Expression
 elements base
@@ -153,7 +153,7 @@ elements base
     elements'
       = do
         elems <- braces (commaSep element)
-        return $ EApp (EN "{}") (base:elems)
+        return $ EApp (en "{}") (base:elems)
 
     element :: Parser Expression
     element
@@ -165,7 +165,7 @@ elements base
       = do
         symbol ":"
         val <- expression
-        return $ EApp (EN "()") [key, val]
+        return $ EApp (en "()") [key, val]
 
 literal :: Parser Literal
 literal
@@ -186,14 +186,14 @@ compositeExpression :: Parser Expression
 compositeExpression
   =   list
   <|> tuple
-  <|> elements (EN "")
+  <|> elements (en "")
   where
-    list = EApp (EN "[]") <$> brackets expressionList
+    list = EApp (en "[]") <$> brackets expressionList
     tuple = do
       list <- parens expressionList
       return $ case list of
         [x] -> x
-        xs  -> EApp (EN "()") xs
+        xs  -> EApp (en "()") xs
 
 expressionList :: Parser [Expression]
 expressionList
@@ -201,7 +201,7 @@ expressionList
 
 identifier :: Parser Name
 identifier
-  = Token.identifier lexer <?> "identifier"
+  = UN <$> Token.identifier lexer <?> "identifier"
 
 identifierOrPlace :: Parser Expression
 identifierOrPlace
@@ -231,7 +231,7 @@ block :: Parser Expression
 block
   = do
     exprs <- manyTill expression end
-    return $ EApp (EN "%block%") exprs
+    return $ EApp (en "%block%") exprs
 
 end = reserved "end"
 
@@ -269,7 +269,7 @@ ifThen
       onTrue <- expression
       reserved "else"
       onFalse <- expression
-      return $ EApp (EN "if") [predicate, onTrue, onFalse]
+      return $ EApp (en "if") [predicate, onTrue, onFalse]
 
 expression :: Parser Expression
 expression

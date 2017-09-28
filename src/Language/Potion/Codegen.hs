@@ -6,6 +6,8 @@ import Text.PrettyPrint
 
 import Language.Potion.Type
 import Language.Potion.Syntax
+import Language.Potion.Type.Context (Context)
+import qualified Language.Potion.Type.Context as Context
 
 goExp :: [Expression] -> Expression -> Doc
 goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
@@ -18,19 +20,19 @@ goExp ns (EMatch exp branches)
   = hsep [text "switch", goExp [] exp, lbrace]
   $+$ nest 4 (goCases ns branches)
   $+$ rbrace
-goExp ns (EApp (ET (EN "recur") _) args)
+goExp ns (EApp (ET (EN (UN "recur")) _) args)
   = hsep [tuple' ns, text "=", tuple' args]
   $+$ text "goto start"
 goExp (_:_) exp
   = text "return" <+> goExp [] exp
 goExp ns (EN name)
-  = text name
+  = goName name
 goExp ns (EL x)
   = goLit x
 goExp ns (EApp f [x, y])
   | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
 goExp ns (EApp (ET (EN name) ty) args)
-  = text name <> tuple args
+  = goName name <> tuple args
 goExp ns (EApp f args)
   = goExp [] f <> tuple args
 goExp ns (EFun ps exp)
@@ -59,7 +61,7 @@ goLit (LS s) = doubleQuotes $ text s
 
 goDef :: Definition -> Doc
 goDef (name, ET (EFun params expr) (TApp (TN "Fun") [paramTypes, outType]))
-  = hsep [func, text name <> goParams params paramTypes, goType outType, lbrace]
+  = hsep [func, goName name <> goParams params paramTypes, goType outType, lbrace]
     $+$ nest 4 (goBody params expr)
     $+$ rbrace
 goDef e = error $ "goDef not implemented for: " ++ show e
@@ -86,7 +88,7 @@ goBody params exp = label $+$ body params [exp]
          else empty
 
 isRecur (ET expr _) = isRecur expr
-isRecur (EN "recur") = True
+isRecur (EN (UN "recur")) = True
 isRecur (EApp expr _) = isRecur expr
 isRecur (EMatch _ cases) = any (\(_, _, e) -> isRecur e) cases
 isRecur (EFun _ expr) = isRecur expr
@@ -96,8 +98,8 @@ body :: [Expression] -> [Expression] -> Doc
 body ps [] = empty
 -- body ps [ET e _] = body ps [e]
 -- body ps [EApp (ET (EN "recur") _) es] = hsep [tuple' ps, text ":=", tuple' es]
-body ps [ET (EApp (EN "%block%") es) _] = body ps es
-body ps [ET (EApp (EN "%let%") [x, v, e]) _] = hsep [goExp [] x, text ":=", goExp [] v] $+$ body ps [e]
+body ps [ET (EApp (EN (UN "%block%")) es) _] = body ps es
+body ps [ET (EApp (EN (UN "%let%")) [x, v, e]) _] = hsep [goExp [] x, text ":=", goExp [] v] $+$ body ps [e]
 -- body ps e = error $ "BODY: " ++ show e
 body ps [x] = goExp ps x
 body ps (x:xs) = goExp [] x $+$ body ps xs
@@ -115,9 +117,13 @@ goType (TApp (TN "Fun") [a, b]) = hsep [func, parens $ goType a, goType b]
 goType (TApp (TN "Map") [a, b]) = hcat [text "map", brackets $ goType a, goType b]
 goType (TV _) = error "can't use type vars in go!"
 
+goName :: Name -> Doc
+goName (UN name) = text name
+goName (PN name ts) = text $ intercalate "Ξ" (name : ts)
+
 func = text "func"
 
 isInfix :: Expression -> Bool
 isInfix (ET e _) = isInfix e
-isInfix (EN (x:_)) = not $ isAlpha x
+isInfix (EN (UN (x:_))) = not $ isAlpha x
 isInfix e = error $ "not for: " ++ show e
