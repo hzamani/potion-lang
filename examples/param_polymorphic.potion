@@ -1,0 +1,10 @@
+
+def id(x) = x
+
+def max(x, y) = if x > y then id(x) else y
+
+def main()
+  /* println(id("test")) */
+  println(max(10, 100))
+  println(max(10.01, 100.001))
+end

@@ -1,0 +1,14 @@
+
+def fact(n)
+  fac = #(product, count) =>
+    if count <= 1
+    then product
+    else recur(product * count, count - 1)
+
+  fac(1, n)
+end
+
+def main()
+  println(fact(10))
+end
+

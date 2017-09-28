@@ -1,0 +1,9 @@
+
+def add(x, y) =
+  if x == 0
+  then y
+  else recur(x - 1, y + 1)
+
+def main()
+  println(add(10000, 1))
+end
