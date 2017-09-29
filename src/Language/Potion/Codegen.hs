@@ -112,11 +112,10 @@ goBody params exp = label $+$ body params [exp]
          then text "start:"
          else empty
 
-isRecur (ET expr _) = isRecur expr
+isRecur (ET exp _) = isRecur exp
 isRecur (EN (UN "recur")) = True
-isRecur (EApp expr _) = isRecur expr
+isRecur (EApp exp args) = isRecur exp || any isRecur args
 isRecur (EMatch _ cases) = any (\(_, _, e) -> isRecur e) cases
-isRecur (EFun _ expr) = isRecur expr
 isRecur _ = False
 
 body :: [Expression] -> [Expression] -> Doc
