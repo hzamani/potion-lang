@@ -27,8 +27,7 @@ goHeader imports
 goExp :: [Expression] -> Expression -> Doc
 goExp ns@(_:_) (ET exp@(EMatch _ _) ty)
   = goExp ns exp
-  $+$ text "var απρόσιτος" <+> goType ty
-  $+$ text "return απρόσιτος"
+  $+$ text "panic(\"should never happen\")"
 goExp ns (ET (EFun ps exp) (TApp (TN "Fun") [_, ty]))
   = hsep [func, goFunParams ps, goType ty, lbrace]
   $+$ nest 4 (goBody ps exp)
