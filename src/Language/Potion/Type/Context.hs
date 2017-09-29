@@ -34,6 +34,9 @@ muns = Map.unionsWith Set.union
 empty :: Context
 empty = Context Map.empty Map.empty
 
+noApp :: Apps
+noApp = Map.empty
+
 base :: Context
 base = fromList
   [ ("+", bin) , ("-", bin) , ("*", bin) , ("/", bin) , ("%", bin)

@@ -84,6 +84,10 @@ un :: Name -> UserName
 un (UN name)   = name
 un (PN name _) = name
 
+true = en "true"
+false = en "false"
+it = en "αυτό"
+
 typeof :: Expression -> Type
 typeof (ET _ ty) = ty
 typeof _ = TUnknown

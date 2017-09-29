@@ -18,9 +18,10 @@ data Type
   deriving (Eq, Ord)
 
 instance Show Type where
+  show TUnknown = "**UNKNOWN**"
   show (TN name) = name
   show (TV var) = show var
-  show (TApp (TN "Tuple") []) = ""
+  show (TApp (TN "Tuple") []) = "()"
   show (TApp (TN "Tuple") [t]) = show t
   show (TApp (TN "Tuple") ts) = "(" ++ intercalate ", " (map show ts) ++ ")"
   show (TApp (TN "Fun") [a, b]) = show a ++ " -> " ++ show b
@@ -42,6 +43,8 @@ instance Show Scheme where
 isTypeName :: String -> Bool
 isTypeName (x:_) = isUpper x
 isTypeName _ = False
+
+tInt = TN "Int"
 
 tArray a  = TApp (TN "Array") [a]
 tMap a b  = TApp (TN "Map") [a, b]

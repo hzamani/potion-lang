@@ -23,6 +23,3 @@ expandIf predicate onTrue onFalse =
     , (false, EPlace, onFalse)
     ]
 
-true = en "true"
-false = en "false"
-it = en "αυτό"
