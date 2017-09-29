@@ -217,7 +217,7 @@ infer (EApp (EN (UN "%block%")) (x:xs))
 infer e@(EApp (EN (UN "[]")) [])
   = do
     ty <- fresh
-    return (ET e $ tArray ty, noApp, [])
+    return (ET (eArrayT ty []) (tArray ty), noApp, [])
 
 infer (EApp (EN (UN "[]")) (x:xs))
   = do
