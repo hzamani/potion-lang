@@ -240,7 +240,7 @@ fun
 
     shorFun = do
       body <- between pipe pipe (expression True) <?> "shortbody"
-      return $ EFun [EPlace] body
+      return $ EFun [ENothing] body
 
     pipe = symbol "|"
 

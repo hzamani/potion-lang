@@ -8,9 +8,8 @@ expand = walk expand'
     expand' (EApp (EN (UN "%block%")) exps) = expandLet exps
     expand' (EApp (EN (UN "if")) [p, t, f]) = expandIf p t f
     expand' (EMatch exp branches) = expandMatch exp branches
+    expand' exp@(EFun [ENothing] body) = replace ENothing it exp
     expand' exp = exp
-    -- expand' (EMatch expr clauses) = EMatch (expand expr) (map expandWith clauses)
-    -- expand' (EFun [EPlace] body) = EFun [it] (replace EPlace it body)
 
 expandLet :: [Expression] -> Expression
 expandLet [expr] = expr
