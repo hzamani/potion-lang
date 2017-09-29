@@ -134,7 +134,7 @@ normalize :: (Expression, Scheme, Apps) -> (Expression, Scheme, Apps)
 normalize (expr, Forall vars ty, apps)
   = (expr', scheme, apps')
   where
-    scheme = Forall (snd <$> debug "CS    " cs) (norm (debug "TYPE  " ty))
+    scheme = Forall (snd <$> cs) (norm ty)
     apps'  = Map.map (Set.map norm) apps
     expr'  = walk normExp expr
 
@@ -147,7 +147,7 @@ normalize (expr, Forall vars ty, apps)
     norm (TApp f as) = TApp (norm f) (map norm as)
     norm (TN a)      = TN a
     norm (TV a)      =
-      case Prelude.lookup (debug "VAR   " a) cs of
+      case Prelude.lookup a cs of
         Just x  -> TV x
         Nothing -> error $ "type variable not in signature: " ++ show (a, cs)
 
