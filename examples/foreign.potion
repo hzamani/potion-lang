@@ -1,0 +1,8 @@
+
+foreign "strings#HasPrefix" hasPrefix : (String, String) -> Bool
+
+def main()
+  s = "Hi There"
+  println(hasPrefix(s, "Hi"))
+  println(hasPrefix(s, "Bye"))
+end

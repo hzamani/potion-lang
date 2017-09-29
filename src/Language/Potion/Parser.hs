@@ -323,6 +323,6 @@ parseExpression :: String -> Either ParseError Expression
 parseExpression
   = parse (contents expression) "<stdin>"
 
-parseFile :: String -> String -> Either ParseError [Declaration]
+parseFile :: String -> String -> Either ParseError SourceFile
 parseFile
-  = parse $ contents $ many declaration
+  = parse $ contents $ File <$> many declaration

@@ -99,10 +99,13 @@ withSchemes schemes
 lookupContext :: UserName -> Infer (Type, Apps)
 lookupContext name
   = do
-    (Context funs) <- ask
+    (Context funs pacs) <- ask
     case Map.lookup name funs of
-      Nothing         -> throwError $ UnboundVariable name
       Just (s, as, _) -> instantiate name s as
+      Nothing         ->
+        case Map.lookup name pacs of
+          Just (_, _, s) -> instantiate name s noApp
+          Nothing        -> throwError $ UnboundVariable name
 
 -- TODO: optimaize name generation
 letters :: [String]
@@ -278,12 +281,13 @@ patternSchemes pat
     patNames (EN (PN name _)) = [name]
     patNames (EApp _ xs)      = concatMap patNames xs
 
-inferDecl :: Context -> [Declaration] -> Either InferError (Context, [Definition])
-inferDecl ctx
-  = mapRight finalize . foldl step (Right (ctx, []))
+inferFile :: Context -> SourceFile -> Either InferError (Context, [Definition])
+inferFile ctx (File decls)
+  = mapRight finalize $ foldl step (Right (ctx, [])) decls
   where
     finalize (ctx, defs) = (ctx, unifyDefs ctx $ reverse defs)
-    -- step (Right (ctx, defs)) (DForeign path name ty)
+    step (Right (ctx, defs)) f@DForeign{}
+      = Right (extendForeign ctx f, defs)
     step (Right (ctx, defs)) (DDef name params body)
       = case inferExp ctx $ expand $ EFun params body of
           Left err -> Left err
@@ -315,15 +319,15 @@ unifyDefs ctx
 
     defConstraints name
       = case Context.lookup ctx name of
-        Just (Forall [] ty, _, variants) ->
-          map (\t -> (ty, t)) $ ty : Set.toList variants
-        Just (Forall _ ty, _, variants) ->
-          map (\t -> (ty, t)) $ Set.toList variants
-        Nothing -> []
+          Just (Forall [] ty, _, variants) ->
+            map (\t -> (ty, t)) $ ty : Set.toList variants
+          Just (Forall _ ty, _, variants) ->
+            map (\t -> (ty, t)) $ Set.toList variants
+          Nothing -> []
 
 extendApps :: Context -> (UserName, Scheme, Apps) -> Context
-extendApps (Context funs) (name, scheme, apps)
-  = Context $ Map.insert name (scheme, apps, Set.empty) funsWithVariants
+extendApps (Context funs pacs) (name, scheme, apps)
+  = Context (Map.insert name (scheme, apps, Set.empty) funsWithVariants) pacs
   where
     funsWithVariants = Map.foldlWithKey insertVariants funs apps
 
@@ -334,6 +338,29 @@ extendApps (Context funs) (name, scheme, apps)
     insertVariant ty (sc, as, vs) = (sc, as, Set.filter noFree ty `Set.union` vs)
 
     noFree = (0 ==) . Set.size . free
+
+extendForeign :: Context -> Declaration -> Context
+extendForeign ctx (DForeign qualified (UN alias) ty)
+  = case split '#' qualified of
+      (package@(_:_), name@(_:_)) ->
+        extendPacked ctx (alias, (package, name, generalize ctx ty))
+      (name@(_:_), "") ->
+        extendPacked ctx (alias, ("", name, generalize ctx ty))
+      _ ->
+        error $ "Invalid qualified name: " ++ show qualified
+extendForeign ctx _ = ctx
+
+split :: (Eq a) => a -> [a] -> ([a], [a])
+split char str
+  = spliter char str []
+  where
+    spliter char [] left
+      = (reverse left, [])
+    spliter char (c:right) left
+      | char == c
+      = (reverse left, right)
+    spliter char (c:right) left
+      = spliter char right (c:left)
 
 -- | Run the constraint solver
 runSolve :: [Constraint] -> Either InferError Substitution

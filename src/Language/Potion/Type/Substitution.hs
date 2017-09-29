@@ -58,8 +58,8 @@ instance Substitutable Expression where
   free e = Set.empty
 
 instance Substitutable Context where
-  apply sub (Context ctx) = Context $ Map.map (apply sub) ctx
-  free (Context ctx) = free $ Map.elems ctx
+  apply sub (Context ctx pacs) = Context (Map.map (apply sub) ctx) pacs
+  free (Context ctx _) = free $ Map.elems ctx
 
 instance (Substitutable a, Substitutable b, Substitutable c) => Substitutable (a, b, c) where
   apply sub (x, y, z) = (apply sub x, apply sub y, apply sub z)

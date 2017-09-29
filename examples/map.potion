@@ -1,5 +1,5 @@
 
-foreign "builtin.append" append : ([a], a) -> [a]
+foreign "append" append : ([a], a) -> [a]
 
 def map(f, as)
   doMap = #(ys, xs) =>

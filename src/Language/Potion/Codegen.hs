@@ -9,16 +9,19 @@ import Language.Potion.Syntax
 import Language.Potion.Type.Context (Context)
 import qualified Language.Potion.Type.Context as Context
 
-toGo :: Context -> [Definition] -> String
-toGo ctx defs
-  = render $ vcat $ goHeader : map goDef defs
+toGo :: Package -> String
+toGo (Package imports defs)
+  = render $ vcat $ goHeader imports : map goDef defs
 
-goHeader :: Doc
-goHeader
-  = vcat
-    [ text "package main"
-    , text "import \"fmt\""
-    ]
+goHeader :: [Import] -> Doc
+goHeader imports
+  = text "package main"
+  $+$ text "import" <+> lparen
+  $+$ nest 4 (vcat imps)
+  $+$ rparen
+  where
+    imps = map imp (Import "fmt" : imports)
+    imp (Import p) = doubleQuotes (text p)
 
 -- FIXME: return in function with no params
 goExp :: [Expression] -> Expression -> Doc

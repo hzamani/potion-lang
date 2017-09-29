@@ -4,12 +4,21 @@ import Debug.Trace
 
 import Language.Potion.Type
 
+type PackageName = String
 type UserName = String
 
 data Name
   = UN UserName          -- user name
   | PN UserName [String] -- parametric name
   deriving (Eq, Ord, Show)
+
+data Literal
+  = LB Bool
+  | LI Integer
+  | LF Double
+  | LC Char
+  | LS String
+  deriving (Eq, Show)
 
 data Expression
   = EApp Expression [Expression]
@@ -36,12 +45,8 @@ newtype SourceFile
   = File [Declaration]
   deriving (Eq, Show)
 
-data Literal
-  = LB Bool
-  | LI Integer
-  | LF Double
-  | LC Char
-  | LS String
+data Package
+  = Package [Import] [Definition]
   deriving (Eq, Show)
 
 -- data Program
@@ -53,9 +58,9 @@ data Literal
 --   | Public
 --   deriving (Eq, Show)
 
--- data Import
---   = Import Name Name -- import repo.module
---   deriving (Eq, Show)
+newtype Import
+  = Import PackageName
+  deriving (Eq, Show)
 
 walk :: (Expression -> Expression) -> Expression -> Expression
 walk f (EApp exp args) = f $ EApp (walk f exp) (map (walk f) args)
@@ -123,5 +128,5 @@ eHashT ty   = EApp (ET (en "#{}") ty)
 eSpreadT ty = EApp (ET (en "...") ty)
 
 debug :: Show a => String -> a -> a
-debug msg x = trace (msgi ++ " " ++ show x) x
+debug msg x = trace (msg ++ " " ++ show x) x
 
