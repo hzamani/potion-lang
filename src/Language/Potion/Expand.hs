@@ -3,13 +3,14 @@ module Language.Potion.Expand (expand) where
 import Language.Potion.Syntax
 
 expand :: Expression -> Expression
-expand (EApp (EN (UN "%block%")) exprs) = expandLet (map expand exprs)
-expand (EApp (EN (UN "if")) [p, t, f]) = expandIf p t f
-expand (EApp f args) = EApp (expand f) (map expand args)
--- expand (EMatch expr clauses) = EMatch (expand expr) (map expandWith clauses)
--- expand (EFun [EPlace] body) = EFun [it] (replace EPlace it body)
-expand (EFun params expr) = EFun params (expand expr)
-expand expr = expr
+expand = walk expand'
+  where
+    expand' (EApp (EN (UN "%block%")) exps) = expandLet exps
+    expand' (EApp (EN (UN "if")) [p, t, f]) = expandIf p t f
+    expand' (EMatch exp branches) = expandMatch exp branches
+    expand' exp = exp
+    -- expand' (EMatch expr clauses) = EMatch (expand expr) (map expandWith clauses)
+    -- expand' (EFun [EPlace] body) = EFun [it] (replace EPlace it body)
 
 expandLet :: [Expression] -> Expression
 expandLet [expr] = expr
@@ -19,7 +20,49 @@ expandLet (head : rest) = EApp (en "%block%") [head, expandLet rest]
 expandIf :: Expression -> Expression -> Expression -> Expression
 expandIf predicate onTrue onFalse =
   EMatch predicate
-    [ (true, EPlace, onTrue)
-    , (false, EPlace, onFalse)
+    [ (true, ENothing, onTrue)
+    , (false, ENothing, onFalse)
     ]
+
+expandMatch :: Expression -> [(Expression, Expression, Expression)] -> Expression
+expandMatch exp branches
+  = EMatch exp' (map (expandBranch name) branches)
+  where
+    (name, exp') = expandMatchExp exp
+
+expandMatchExp :: Expression -> (Expression, Expression)
+expandMatchExp exp@(ident@(EN _)) = (ident, exp)
+-- expandMatchExp exp = (it, exp)
+expandMatchExp exp = (it, EApp (en ":=") [it, exp, ENothing])
+
+expandBranch :: Expression -> (Expression, Expression, Expression) -> (Expression, Expression, Expression)
+-- expandBranch (whit, when, exp)
+expandBranch ident (EApp (EN (UN "[]")) elems, when, exp)
+  = (ENothing, EApp (en op) [EApp (en "length") [ident], intLit n], prependLets ident exp elems)
+  where
+    op = if hasSpread then ">=" else "=="
+    hasSpread = n /= length elems
+    noSpread = filter (not . isSpread) elems
+    n = length noSpread
+expandBranch ident b = b
+
+intLit = EL . LI . toInteger
+
+prependLets ident exp = fst . foldl (prependLet ident) (exp, 0)
+
+prependLet ident (exp, n) (EApp (EN (UN "...")) [ENothing])
+  = (exp, n)
+prependLet ident (exp, n) (EApp (EN (UN "...")) [elem])
+  = (eLet [elem, eSlice [ident, intLit n, ENothing], exp], n)
+prependLet ident (exp, n) ENothing
+  = (exp, n + 1)
+prependLet ident (exp, n) elem
+  = (eLet [elem, eSlice [ident, intLit n], exp], n + 1)
+
+arrayLength :: [Expression] -> Integer
+arrayLength = toInteger . length . filter isSpread
+
+isSpread (ET exp _) = isSpread exp
+isSpread (EApp (EN (UN "...")) _) = True
+isSpread _ = False
 

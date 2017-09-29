@@ -1,6 +1,20 @@
 
+foreign "len" length : [a] -> Int
+
 def array(x, y) = [x, y]
 
+def test(xs)
+  match xs
+  with [] => (0, 0)
+  with [_] => (1, 0)
+  with [x, y, ...] => (x, y)
+  end
+end
+
 def main()
+  xs = [1, 2, 3, 4]
+  println(xs[1])
+  println(xs[1:])
   println(array(1, 2))
+  println(test(xs))
 end

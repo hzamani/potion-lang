@@ -35,9 +35,7 @@ goExp ns (ET (EFun ps exp) (TApp (TN "Fun") [_, ty]))
 goExp ns (ET exp ty)
   = goExp ns exp
 goExp ns (EMatch exp branches)
-  = hsep [text "switch", goExp [] exp, lbrace]
-  $+$ nest 4 (goCases ns branches)
-  $+$ rbrace
+  = goMatch ns exp branches
 goExp ns (EApp (ET (EN (UN "recur")) _) args)
   = hsep [tuple' ns, text "=", tuple' args]
   $+$ text "goto start"
@@ -47,10 +45,20 @@ goExp ns (EN name)
   = goName name
 goExp ns (EL x)
   = goLit x
+goExp ns ENothing
+  = empty
+goExp ns EPlace
+  = empty
 goExp ns (EApp (ET (EN (PN "println" _)) _) args)
   = text "fmt.Println" <> tuple args
+goExp ns (EApp (EN (UN "()")) args)
+  = tuple' args
 goExp ns (EApp (ET (EN (UN "[]")) ty) args)
   = text "[]" <> goType ty <> literal args
+goExp ns (EApp (EN (UN "[:]")) [base, index])
+  = goExp ns base <> brackets (goExp ns index)
+goExp ns (EApp (EN (UN "[:]")) [base, start, end])
+  = goExp ns base <> brackets (goExp ns start <> text ":" <> goExp ns end)
 goExp ns (EApp f [x, y])
   | isInfix f = hsep [goExp [] x, goExp [] f, goExp [] y]
 goExp ns (EApp (ET (EN name) ty) args)
@@ -59,11 +67,22 @@ goExp ns (EApp f args)
   = goExp [] f <> tuple args
 goExp _ e = error $ "goExp not implemented for: " ++ show e
 
-goCases ns
+goCases ns name
   = vcat . map goCase
   where
-    goCase (cond, ET EPlace _, exp) = text "case" <+> goExp [] cond <> text ":" $+$ nest 4 (goExp ns exp)
+    goCase (cond, ET ENothing _, exp) = text "case" <+> goExp [] name <+> text "==" <+> goExp [] cond <> text ":" $+$ nest 4 (body ns [exp])
+    goCase (ET ENothing _, cond, exp) = text "case" <+> goExp [] cond <> text ":" $+$ nest 4 (body ns [exp])
     goCase x = text $ show x
+
+goMatch ns exp@(ET EApp{} _) branches
+  = hsep [text "switch", goExp [] it <+> text ":=" <+> goExp [] exp <> text ";", lbrace]
+  $+$ nest 4 (goCases ns it branches)
+  $+$ rbrace
+
+goMatch ns exp branches
+  = hsep [text "switch", lbrace]
+  $+$ nest 4 (goCases ns it branches)
+  $+$ rbrace
 
 literal = braces . commaSep . map (goExp [])
 tuple = parens . commaSep . map (goExp [])

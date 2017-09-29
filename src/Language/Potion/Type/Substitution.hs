@@ -29,13 +29,13 @@ class Substitutable a where
   free :: a -> Set TVar
 
 instance Substitutable Type where
-  apply sub ty@(TN _) = ty
   apply (Sub s) ty@(TV a) = Map.findWithDefault ty a s
   apply sub (TApp f as) = TApp (apply sub f) (map (apply sub) as)
+  apply sub ty = ty
 
-  free (TN _) = Set.empty
   free (TV a) = Set.singleton a
   free (TApp f as) = Set.unions $ map free (f:as)
+  free _ = Set.empty
 
 instance Substitutable Scheme where
   apply (Sub s) (Forall vars t) = Forall vars $ apply sub t

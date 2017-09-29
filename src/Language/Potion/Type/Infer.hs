@@ -162,6 +162,11 @@ infer e@EPlace
     tv <- fresh
     return (ET e tv, noApp, [])
 
+infer e@ENothing
+  = do
+    tv <- fresh
+    return (ET e tv, noApp, [])
+
 infer e@(EN (UN name))
   | isTypeName name
   = return (ET e $ TN name, noApp, [])
@@ -209,7 +214,24 @@ infer (EApp (EN (UN "%block%")) (x:xs))
         (ei, ai, ci) <- infer expr
         return (ei:es, a `mun` ai, c ++ ci)
 
-infer e@(EApp (EN (UN "[]")) [])
+infer (EApp (EN (UN "[:]")) [base, index])
+  = do
+    ty           <- fresh
+    (eb, ab, cb) <- infer base
+    (ei, ai, ci) <- infer index
+    let typed = eSlice [eb, ei]
+    return (ET typed ty, ab `mun` ai, cb ++ ci ++ [(typeof ei, tInt), (typeof eb, tArray ty)])
+
+infer e@(EApp (EN (UN "[:]")) [base, start, end])
+  = do
+    ty           <- fresh
+    (eb, ab, cb) <- infer base
+    (es, as, cs) <- infer start
+    (ee, ae, ce) <- infer end
+    let typed = eSlice [eb, es, ee]
+    return (ET typed ty, muns [ab, as, ae], cb ++ cs ++ ce ++ [(typeof es, tInt), (typeof ee, tInt), (typeof eb, ty)])
+
+infer (EApp (EN (UN "[]")) [])
   = do
     ty <- fresh
     return (ET (eArrayT ty []) (tArray ty), noApp, [])
@@ -223,9 +245,14 @@ infer (EApp (EN (UN "[]")) (x:xs))
     return (ET typed (tArray ty), as, cs)
   where
     inferStep (es, ty, as, cs) exp
-      = do
-        (ei, ai, ci) <- infer exp
-        return (ei:es, ty, ai `mun` as, ci ++ cs ++ [(ty, typeof ei)])
+      = case exp of
+          (EApp (EN (UN "...")) [arg]) -> do
+            (ei, ai, ci) <- infer arg
+            let ei' = eSpreadT ty [ei]
+            return (ei':es, ty, ai `mun` as, ci ++ cs ++ [(tArray ty, typeof ei)])
+          _ -> do
+            (ei, ai, ci) <- infer exp
+            return (ei:es, ty, ai `mun` as, ci ++ cs ++ [(ty, typeof ei)])
 
 infer (EApp (EN (UN "()")) exps)
   = do
@@ -272,6 +299,7 @@ patternSchemes pat
   where
     patNames :: Expression -> [UserName]
     patNames EPlace           = []
+    patNames ENothing         = []
     patNames (EL _)           = []
     patNames (EN (UN name))   = [name]
     patNames (EN (PN name _)) = [name]
