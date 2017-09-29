@@ -32,7 +32,7 @@ potionDef
 reservedNames
   = [ "true", "false"
     , "def", "end"
-    , "match", "with"
+    , "match", "with", "when"
     , "if", "then", "else"
     ]
 
@@ -43,6 +43,8 @@ reservedOpNames
     , ">", ">=", "==", "<=", "<", "!="
     , "@"
     , "."
+    , "..."
+    , "_"
     , "?"
     , "-", "+"
     , "*", "/", "%"
@@ -85,6 +87,7 @@ symbol = Token.symbol lexer
 table :: Exp.OperatorTable String () Identity Expression
 table
   = [ [ bin "." ]
+    , [ pos "..."]
     , [ pre "-", pre "+" ]
     , [ bin "*", bin "/", bin "%" ]
     , [ bin "+", bin "-" ]
@@ -95,27 +98,33 @@ table
     , [ bin "::" ]
     ]
   where
-    bin op = binary op (\x y -> EApp (en op) [x, y]) Exp.AssocLeft
-    pre op = prefix op (\x   -> EApp (en $ op ++ "/1") [x])
+    bin op = binary  op (\x y -> EApp (en op) [x, y]) Exp.AssocLeft
+    pre op = prefix  op (\x   -> EApp (en $ op ++ "/1") [x])
+    pos op = postfix op (\x   -> EApp (en op) [x])
 
     prefix :: String -> (a -> a) -> Exp.Operator String () Identity a
     prefix op f = Exp.Prefix (reservedOp op >> return f)
+
+    postfix :: String -> (a -> a) -> Exp.Operator String () Identity a
+    postfix op f = Exp.Postfix (reservedOp op >> return f)
 
     binary :: String -> (a -> a -> a) -> Exp.Assoc -> Exp.Operator String () Identity a
     binary op f = Exp.Infix (reservedOp op >> return f)
 
 operand :: Bool -> Parser Expression
 operand False
-  =   compositeExpression
-  <|> EL <$> literal
-  <|> EN <$> identifier
+  =   compositeExpression False
   <|> fun
   <|> match
   <|> ifThen
+  <|> EL <$> literal
+  <|> EN <$> identifier
 
 operand True
-  =   operand False
-  <|> const EPlace <$> reserved "_"
+  =   const ENothing <$> symbol "_"
+  <|> const (eSpread [ENothing]) <$> symbol "..."
+  <|> compositeExpression True
+  <|> operand False
 
 primaryExpression :: Bool -> Parser Expression
 primaryExpression inPattern
@@ -126,7 +135,7 @@ primaryExpression inPattern
     primary base = option base (part base)
     part base =
       do
-        base' <- arguments base <|> slice base <|> elements base
+        base' <- arguments base <|> slice base <|> elements inPattern base
         primary base'
 
 arguments :: Expression -> Parser Expression
@@ -135,20 +144,27 @@ arguments base
   where
     arguments' =
       do
-        args <- parens expressionList
+        args <- parens (expressionList False)
         return $ EApp base args
 
 slice :: Expression -> Parser Expression
 slice base
-  = slice' <?> "slice"
+  = brackets slice' <?> "slice"
   where
     slice' =
       do
-        index <- brackets expression
-        return $ EApp (en "[..]") [base, index]
+        index <- expression False
+        args <- option [base, index] (sliceRange base index)
+        return $ EApp (en "[:]") args
 
-elements :: Expression -> Parser Expression
-elements base
+sliceRange base start
+  = do
+    reservedOp ":"
+    end <- option ENothing $ expression False
+    return [base, start, end]
+
+elements :: Bool -> Expression -> Parser Expression
+elements inPattern base
   = elements' <?> "elements"
   where
     elements'
@@ -159,13 +175,13 @@ elements base
     element :: Parser Expression
     element
       = do
-        key <- expression
+        key <- expression inPattern
         option key (keyValue key)
 
     keyValue key
       = do
         symbol ":"
-        val <- expression
+        val <- expression inPattern
         return $ EApp (en "()") [key, val]
 
 literal :: Parser Literal
@@ -183,22 +199,22 @@ literal
     false = const (LB False) <$> reserved "false"
     bool = true <|> false
 
-compositeExpression :: Parser Expression
-compositeExpression
+compositeExpression :: Bool -> Parser Expression
+compositeExpression inPattern
   =   list
   <|> tuple
-  <|> elements (en "")
+  <|> elements inPattern (en "")
   where
-    list = EApp (en "[]") <$> brackets expressionList
+    list = EApp (en "[]") <$> brackets (expressionList inPattern)
     tuple = do
-      list <- parens expressionList
+      list <- parens (expressionList inPattern)
       return $ case list of
         [x] -> x
         xs  -> EApp (en "()") xs
 
-expressionList :: Parser [Expression]
-expressionList
-  = commaSep expression <?> "expression list"
+expressionList :: Bool -> Parser [Expression]
+expressionList inPattern
+  = commaSep (expression inPattern) <?> "expression list"
 
 identifier :: Parser Name
 identifier
@@ -219,20 +235,26 @@ fun
     simpleFun = do
       params <- parens (commaSep identifierOrPlace) <?> "parameters"
       fatArrow
-      body <- expression
+      body <- expression False
       return $ EFun params body
 
     shorFun = do
-      body <- between pipe pipe patter <?> "shortbody"
+      body <- between pipe pipe (expression True) <?> "shortbody"
       return $ EFun [EPlace] body
 
     pipe = symbol "|"
 
+inlineBlock :: Parser Expression
+inlineBlock
+  = do
+    exps <- many1 (expression False)
+    return $ EApp (en "%block%") exps
+
 block :: Parser Expression
 block
   = do
-    exprs <- manyTill expression end
-    return $ EApp (en "%block%") exprs
+    exps <- manyTill (expression False) end
+    return $ EApp (en "%block%") exps
 
 end = reserved "end"
 
@@ -242,43 +264,48 @@ match :: Parser Expression
 match
   = do
       reserved "match"
-      expr <- expression
+      expr <- expression False
       branches <- manyTill matchCase end
       return $ EMatch expr branches
 
 matchCase :: Parser (Expression, Expression, Expression)
 matchCase
   = do
-      reserved "with"
-      pat <- patter
-      pred <- option EPlace when
+      (pat, pred) <- with <|> when ENothing
       fatArrow
-      expr <- expression
-      return (pat, pred, expr)
+      exps <- inlineBlock
+      return (pat, pred, exps)
   where
-    when
-      = do
-          reserved "when"
-          expression
+    with = do
+      reserved "with"
+      pat <- expression True
+      option (pat, ENothing) (when pat)
+
+    when pat = do
+      reserved "when"
+      pred <- expression False
+      return (pat, pred)
 
 ifThen :: Parser Expression
 ifThen
   = do
-      reserved "if"
-      predicate <- expression
-      reserved "then"
-      onTrue <- expression
-      reserved "else"
-      onFalse <- expression
-      return $ EApp (en "if") [predicate, onTrue, onFalse]
+    reserved "if"
+    predicate <- expression False
+    reserved "then"
+    onTrue <- expression False
+    reserved "else"
+    onFalse <- expression False
+    return $ EApp (en "if") [predicate, onTrue, onFalse]
 
-expression :: Parser Expression
-expression
+expression :: Bool -> Parser Expression
+expression False
   = Exp.buildExpressionParser table (primaryExpression False) <?> "expression"
-
-patter :: Parser Expression
-patter
+expression True
   = Exp.buildExpressionParser table (primaryExpression True) <?> "pattern"
+
+-- patter :: Parser Expression
+-- patter
+--   = Exp.buildExpressionParser table (primaryExpression True) <?> "pattern"
 
 contents :: Parser a -> Parser a
 contents p
@@ -291,6 +318,7 @@ contents p
 declaration :: Parser Declaration
 declaration
   =   def
+  <|> sig
   <|> defForeign
 
 def :: Parser Declaration
@@ -305,23 +333,36 @@ def
     shortDef
       = do
         reservedOp "="
-        expression
+        expression False
+
+sig :: Parser Declaration
+sig
+  = do
+    reserved "signature"
+    (name, ty) <- signature
+    return $ DSig name ty
+
+signature :: Parser (Name, Type)
+signature
+  = do
+    name <- identifier
+    reservedOp ":"
+    ins <- expression False
+    reservedOp "->"
+    outs <- expression False
+    return (name, toFun ins outs)
 
 defForeign :: Parser Declaration
 defForeign
   = do
     reserved "foreign"
     path <- Token.stringLiteral lexer
-    name <- identifier
-    reservedOp ":"
-    ins <- expression
-    reservedOp "->"
-    outs <- expression
-    return $ DForeign path name $ tFun (toType ins) (toType outs)
+    (name, ty) <- signature
+    return $ DForeign path name ty
 
 parseExpression :: String -> Either ParseError Expression
 parseExpression
-  = parse (contents expression) "<stdin>"
+  = parse (contents $ expression False) "<stdin>"
 
 parseFile :: String -> String -> Either ParseError SourceFile
 parseFile

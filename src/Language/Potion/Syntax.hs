@@ -27,6 +27,7 @@ data Expression
   | EL Literal
   | EN Name
   | EPlace
+  | ENothing
   | ET Expression Type
   deriving (Eq, Show)
 
@@ -86,6 +87,8 @@ un (PN name _) = name
 
 true = en "true"
 false = en "false"
+
+-- FIXME: better name generations, this may produce confilicts
 it = en "αυτό"
 
 typeof :: Expression -> Type
@@ -99,6 +102,14 @@ toType (EN (UN name))
   = toTypeCon name
 toType exp
   = error $ "can't be used in type signature: " ++ show exp
+
+toFun :: Expression -> Expression -> Type
+toFun ins outs
+  = tFun params (toType outs)
+  where
+    params = case toType ins of
+      a@(TApp (TN "Tuple") _) -> a
+      a -> tTuple [a]
 
 toTypeCon :: UserName -> Type
 toTypeCon "()" = TN "Tuple"
@@ -121,7 +132,9 @@ eFun    = EApp (en "#")
 eTuple  = EApp (en "()")
 eList   = EApp (en "#[]")
 eHash   = EApp (en "#{}")
+eSlice  = EApp (en "[:]")
 eSpread = EApp (en "...")
+eLet    = EApp (en "%let%")
 
 eArrayT ty  = EApp (ET (en "[]") ty)
 eMapT ty    = EApp (ET (en "{}") ty)
@@ -129,6 +142,7 @@ eFunT ty    = EApp (ET (en "#") ty)
 eTupleT ty  = EApp (ET (en "()") ty)
 eListT ty   = EApp (ET (en "#[]") ty)
 eHashT ty   = EApp (ET (en "#{}") ty)
+eSliceT ty  = EApp (ET (en "[:]") ty)
 eSpreadT ty = EApp (ET (en "...") ty)
 
 debug :: Show a => String -> a -> a
