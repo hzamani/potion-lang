@@ -1,6 +1,7 @@
 module Language.Potion.Type where
 
 import Data.List
+import Data.Char (isUpper)
 
 newtype TVar
   = TVar String
@@ -19,6 +20,7 @@ data Type
 instance Show Type where
   show (TN name) = name
   show (TV var) = show var
+  show (TApp (TN "Tuple") []) = ""
   show (TApp (TN "Tuple") [t]) = show t
   show (TApp (TN "Tuple") ts) = "(" ++ intercalate ", " (map show ts) ++ ")"
   show (TApp (TN "Fun") [a, b]) = show a ++ " -> " ++ show b
@@ -36,6 +38,10 @@ data Scheme
 instance Show Scheme where
   show (Forall [] ty) = show ty
   show (Forall vars ty) = "Ɐ" ++ intercalate "," (map show vars) ++ ". " ++ show ty
+
+isTypeName :: String -> Bool
+isTypeName (x:_) = isUpper x
+isTypeName _ = False
 
 tArray a  = TApp (TN "Array") [a]
 tMap a b  = TApp (TN "Map") [a, b]

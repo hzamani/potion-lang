@@ -9,7 +9,7 @@ import Control.Monad.Reader
 import Control.Monad.Identity
 
 import Data.Either.Combinators (mapRight)
-import Data.Char (isUpper, isAlpha)
+import Data.Char (isAlpha)
 import Data.Foldable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -154,10 +154,6 @@ normalize (expr, Forall vars ty, apps)
 noApp :: Apps
 noApp = Map.empty
 
-isType :: String -> Bool
-isType (x:_) = isUpper x
-isType _ = False
-
 infer :: Expression -> Infer (Expression, Apps, [Constraint])
 infer e@(EL lit)
   = return (ET e $ litteralType lit, noApp, [])
@@ -168,7 +164,7 @@ infer e@EPlace
     return (ET e tv, noApp, [])
 
 infer e@(EN (UN name))
-  | isType name
+  | isTypeName name
   = return (ET e $ TN name, noApp, [])
 
 infer e@(EN (UN name))
