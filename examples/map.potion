@@ -1,0 +1,15 @@
+
+foreign "builtin.append" append : ([a], a) -> [a]
+
+def map(f, as)
+  doMap = #(ys, xs) =>
+    match xs
+      with [] => ys
+      with [x, rest...] => recur(append(ys, f(x)), rest)
+    end
+  doMap([], as)
+end
+
+def main()
+  println(map(#(x) => x * 10, [1,2,3,4]))
+end

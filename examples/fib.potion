@@ -1,0 +1,12 @@
+
+def fibonacci(n)
+  fib = #(a, b, count) =>
+    if count == 0
+    then a
+    else recur(b, a + b, count - 1)
+  fib(0, 1, n)
+end
+
+def main()
+  println(fibonacci(100))
+end

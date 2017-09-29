@@ -83,6 +83,22 @@ typeof :: Expression -> Type
 typeof (ET _ ty) = ty
 typeof _ = TUnknown
 
+toType :: Expression -> Type
+toType (EApp f args)
+  = TApp (toType f) (map toType args)
+toType (EN (UN name))
+  = toTypeCon name
+toType exp
+  = error $ "can't be used in type signature: " ++ show exp
+
+toTypeCon :: UserName -> Type
+toTypeCon "()" = TN "Tuple"
+toTypeCon "[]" = TN "Array"
+toTypeCon "{}" = TN "Map"
+toTypeCon "#"  = TN "Fun"
+toTypeCon name | isTypeName name = TN name
+toTypeCon name = TV (TVar name)
+
 litteralType :: Literal -> Type
 litteralType (LB _) = TN "Bool"
 litteralType (LI _) = TN "Int"

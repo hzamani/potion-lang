@@ -10,6 +10,7 @@ import Text.Parsec.Language (emptyDef)
 import qualified Text.Parsec.Expr as Exp
 import qualified Text.Parsec.Token as Token
 
+import Language.Potion.Type
 import Language.Potion.Syntax
 
 potionDef :: Token.LanguageDef ()
@@ -289,7 +290,8 @@ contents p
 
 declaration :: Parser Declaration
 declaration
-  = def
+  =   def
+  <|> defForeign
 
 def :: Parser Declaration
 def
@@ -304,6 +306,18 @@ def
       = do
         reservedOp "="
         expression
+
+defForeign :: Parser Declaration
+defForeign
+  = do
+    reserved "foreign"
+    path <- Token.stringLiteral lexer
+    name <- identifier
+    reservedOp ":"
+    ins <- expression
+    reservedOp "->"
+    outs <- expression
+    return $ DForeign path name $ tFun (toType ins) (toType outs)
 
 parseExpression :: String -> Either ParseError Expression
 parseExpression

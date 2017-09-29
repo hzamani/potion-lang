@@ -283,11 +283,12 @@ inferDecl ctx
   = mapRight finalize . foldl step (Right (ctx, []))
   where
     finalize (ctx, defs) = (ctx, unifyDefs ctx $ reverse defs)
+    -- step (Right (ctx, defs)) (DForeign path name ty)
     step (Right (ctx, defs)) (DDef name params body)
       = case inferExp ctx $ expand $ EFun params body of
           Left err -> Left err
           Right (expr, scheme, apps) -> Right (extendApps ctx (un name, scheme, apps), (name, expr):defs)
-    step left _ = left
+    step ctx _ = ctx
 
 unifyDefs :: Context -> [Definition] -> [Definition]
 unifyDefs ctx
