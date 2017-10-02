@@ -1,16 +1,12 @@
 module Language.Potion.Syntax where
 
 import Debug.Trace
+import Data.Map.Strict (Map)
+import Text.Parsec.Pos
 
 import Language.Potion.Type
 
-type PackageName = String
-type UserName = String
-
-data Name
-  = UN UserName          -- user name
-  | PN UserName [String] -- parametric name
-  deriving (Eq, Ord, Show)
+type Name = String
 
 data Literal
   = LB Bool
@@ -18,132 +14,126 @@ data Literal
   | LF Double
   | LC Char
   | LS String
+  deriving (Eq)
+
+instance Show Literal where
+  show (LB x) = show x
+  show (LI x) = show x
+  show (LF x) = show x
+  show (LC x) = show x
+  show (LS x) = show x
+
+data Meta
+  = Meta
+    { metaPos :: Maybe SourcePos
+    , metaType :: Maybe Type
+    , metaAlias :: Maybe (Name, Name)
+    }
   deriving (Eq, Show)
 
 data Expression
-  = EApp Expression [Expression]
-  | EFun [Expression] Expression
-  | EMatch Expression [(Expression, Expression, Expression)] -- (pattern, when, expr)
-  | EL Literal
-  | EN Name
-  | EPlace
-  | ENothing
-  | ET Expression Type
+  = EApp Meta Expression [Expression]
+  | EFun Meta [Expression] Expression
+  | EMatch Meta Expression [Expression]
+  | ECase Meta Expression Expression Expression -- with when exp
+  | ELit Meta Literal
+  | EName Meta Name
+  | EHole Meta
+  deriving (Eq)
+
+instance Show Expression where
+  show (EApp _ f args)         = "(" ++ show f ++ " " ++ show args ++ ")"
+  show (EFun _ params exp)     = "(λ" ++ show params ++ " -> " ++ show exp ++ ")"
+  show (EMatch _ exp cases)    = "(μ " ++ show exp ++ " " ++ show cases ++ ")"
+  show (ECase _ with when exp) = "(ω " ++ show (with, when) ++ " => " ++ show exp ++ ")"
+  show (ELit _ val)            = show val
+  show (EName _ name)          = name
+  show (EHole _)               = "◻"
+
+data Definition
+  = DFun Meta Expression
+  | DSig Meta Type
+  | DForeign Meta String Type
   deriving (Eq, Show)
 
-data Declaration
-  = DDef Name [Expression] Expression
-  | DSig Name Type
-  | DForeign String Name Type
-  -- | DData Name Constructors
-  -- | DIFace Name Constraint [Declaration]
-  -- | DImpl Name Type Constraint [Declaration] -- interface type
+type Code = Map Name Definition
+
+data SourceFile
+  = File Name Code
   deriving (Eq, Show)
 
-type Definition = (Name, Expression)
+noMeta :: Meta
+noMeta
+  = Meta
+    { metaPos = Nothing
+    , metaType = Nothing
+    , metaAlias = Nothing
+    }
 
-newtype SourceFile
-  = File [Declaration]
-  deriving (Eq, Show)
+metaFromPos :: SourcePos -> Meta
+metaFromPos p = noMeta{ metaPos = Just p }
 
-data Package
-  = Package [Import] [Definition]
-  deriving (Eq, Show)
+eMeta :: Expression -> Meta
+eMeta (EApp meta _ _)    = meta
+eMeta (EFun meta _ _)    = meta
+eMeta (EMatch meta _ _)  = meta
+eMeta (ECase meta _ _ _) = meta
+eMeta (ELit meta _)      = meta
+eMeta (EName meta _)     = meta
+eMeta (EHole meta)       = meta
 
--- data Program
---   = Program [Import] [(Access, Declaration)]
---   deriving (Eq, Show)
+putMeta :: Meta -> Expression -> Expression
+putMeta m (EApp _ f as)   = EApp m f as
+putMeta m (EFun _ ps e)   = EFun m ps e
+putMeta m (EMatch _ f as) = EMatch m f as
+putMeta m (ECase _ x y z) = ECase m x y z
+putMeta m (ELit _ v)      = ELit m v
+putMeta m (EName _ n)     = EName m n
+putMeta m (EHole _)       = EHole m
 
--- data Access
---   = Private
---   | Public
---   deriving (Eq, Show)
+eApp   = EApp noMeta
+eFun   = EFun noMeta
+eMatch = EMatch noMeta
+eCase  = ECase noMeta
+eLit   = ELit noMeta
+eName  = EName noMeta
+eHole  = EHole noMeta
 
-newtype Import
-  = Import PackageName
-  deriving (Eq, Show)
+eOp op = eApp (eName op)
 
-walk :: (Expression -> Expression) -> Expression -> Expression
-walk f (EApp exp args) = f $ EApp (walk f exp) (map (walk f) args)
-walk f (EMatch exp cases) = f $ EMatch (walk f exp) (map (walk3 f) cases)
-  where
-    walk3 f (a, b, c) = (walk f a, walk f b, walk f c)
-walk f (EFun params body) = f $ EFun (map (walk f) params) (walk f body)
-walk f (ET exp ty) = f $ ET (walk f exp) ty
-walk f exp = f exp
+eTrue  = eName "true"
+eFalse = eName "false"
 
-replace :: Expression -> Expression -> Expression -> Expression
-replace x y
-  = walk rep
-  where
-    rep exp = if exp == x then y else exp
+dFun     = DFun noMeta
+dSig     = DSig noMeta
+dForeign = DForeign noMeta
 
-en :: String -> Expression
-en = EN . UN
+-- typeof :: Expression -> Type
+-- typeof = metaType . eMeta
 
-un :: Name -> UserName
-un (UN name)   = name
-un (PN name _) = name
+eWalk :: (Expression -> Expression) -> Expression -> Expression
+eWalk f (EApp meta exp args)
+  = f $ EApp meta (eWalk f exp) (map (eWalk f) args)
+eWalk f (EFun meta params body)
+  = f $ EFun meta (map (eWalk f) params) (eWalk f body)
+eWalk f (EMatch meta exp cases)
+  = f $ EMatch meta (eWalk f exp) (map (eWalk f) cases)
+eWalk f (ECase meta with when exp)
+  = f $ ECase meta (eWalk f with) (eWalk f when) (eWalk f exp)
+eWalk f exp
+  = f exp
 
-true = en "true"
-false = en "false"
+eReplace :: Expression -> Expression -> Expression -> Expression
+eReplace x y
+  = let rep exp = if exp == x then y else exp in eWalk rep
 
--- FIXME: better name generations, this may produce confilicts
-it = en "αυτό"
+lType :: Literal -> Type
+lType (LB _) = tBool
+lType (LI _) = tInt
+lType (LF _) = tFloat
+lType (LC _) = tChar
+lType (LS _) = tString
 
-typeof :: Expression -> Type
-typeof (ET _ ty) = ty
-typeof _ = TUnknown
-
-toType :: Expression -> Type
-toType (EApp f args)
-  = TApp (toType f) (map toType args)
-toType (EN (UN name))
-  = toTypeCon name
-toType exp
-  = error $ "can't be used in type signature: " ++ show exp
-
-toFun :: Expression -> Expression -> Type
-toFun ins outs
-  = tFun params (toType outs)
-  where
-    params = case toType ins of
-      a@(TApp (TN "Tuple") _) -> a
-      a -> tTuple [a]
-
-toTypeCon :: UserName -> Type
-toTypeCon "()" = TN "Tuple"
-toTypeCon "[]" = TN "Array"
-toTypeCon "{}" = TN "Map"
-toTypeCon "#"  = TN "Fun"
-toTypeCon name | isTypeName name = TN name
-toTypeCon name = TV (TVar name)
-
-litteralType :: Literal -> Type
-litteralType (LB _) = TN "Bool"
-litteralType (LI _) = TN "Int"
-litteralType (LF _) = TN "Float"
-litteralType (LC _) = TN "Char"
-litteralType (LS _) = TN "String"
-
-eArray  = EApp (en "[]")
-eMap    = EApp (en "{}")
-eFun    = EApp (en "#")
-eTuple  = EApp (en "()")
-eList   = EApp (en "#[]")
-eHash   = EApp (en "#{}")
-eSlice  = EApp (en "[:]")
-eSpread = EApp (en "...")
-eLet    = EApp (en "%let%")
-
-eArrayT ty  = EApp (ET (en "[]") ty)
-eMapT ty    = EApp (ET (en "{}") ty)
-eFunT ty    = EApp (ET (en "#") ty)
-eTupleT ty  = EApp (ET (en "()") ty)
-eListT ty   = EApp (ET (en "#[]") ty)
-eHashT ty   = EApp (ET (en "#{}") ty)
-eSliceT ty  = EApp (ET (en "[:]") ty)
-eSpreadT ty = EApp (ET (en "...") ty)
 
 debug :: Show a => String -> a -> a
 debug msg x = trace (msg ++ " " ++ show x) x

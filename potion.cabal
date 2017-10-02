@@ -18,13 +18,8 @@ library
   exposed-modules:     Language.Potion
                      , Language.Potion.Parser
                      , Language.Potion.Syntax
-                     , Language.Potion.Expand
                      , Language.Potion.REPL
-                     , Language.Potion.Codegen
                      , Language.Potion.Type
-                     , Language.Potion.Type.Context
-                     , Language.Potion.Type.Infer
-                     , Language.Potion.Type.Substitution
   build-depends:       base >= 4.7 && < 5
                      , parsec
                      , mtl

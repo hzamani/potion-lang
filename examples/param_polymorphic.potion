@@ -1,7 +1,7 @@
 
 def id(x) = x
 
-def max(x, y) = if x > y then id(x) else y
+def max(x, y) = if (x > y) id(x) else y end
 
 def main()
   /* println(id("test")) */
