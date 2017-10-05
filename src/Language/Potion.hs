@@ -3,6 +3,8 @@ module Language.Potion (compile) where
 import System.Exit
 
 import Language.Potion.Parser
+import Language.Potion.Expand
+-- import Language.Potion.Type.Infer
 
 exitOnError :: Show e => Either e a -> IO a
 exitOnError (Right val)
@@ -13,10 +15,19 @@ exitOnError (Left err)
     exitFailure
 
 compile :: String -> IO ()
-compile file =
-  do
+compile file
+  = do
     source <- readFile file
-    code <- exitOnError $ parseFile file source
     putStrLn "-----------------------------------------------"
+    code <- exitOnError $ parse file source
     print code
     putStrLn "-----------------------------------------------"
+    let expanded = expand code
+    print expanded
+    putStrLn "-----------------------------------------------"
+    -- context <- exitOnError $ infer expanded baseContext
+    -- print context
+    -- putStrLn "-----------------------------------------------"
+    -- generated <- exitOnError $ codegen context
+    -- print generated
+    -- putStrLn "-----------------------------------------------"

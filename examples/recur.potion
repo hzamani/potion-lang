@@ -1,11 +1,10 @@
 
-def add(x, y) =
-  if x == 0
-    y
-  else
-    recur(x - 1, y + 1)
+define add(x, y) =
+  match x
+  with 0 => y
+  with _ => recur(x - 1, y + 1)
   end
 
-def main()
+define main()
   println(add(10000, 1))
 end

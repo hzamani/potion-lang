@@ -20,6 +20,9 @@ library
                      , Language.Potion.Syntax
                      , Language.Potion.REPL
                      , Language.Potion.Type
+                     , Language.Potion.Type.Context
+                     , Language.Potion.Type.Substitution
+                     , Language.Potion.Expand
   build-depends:       base >= 4.7 && < 5
                      , parsec
                      , mtl

@@ -1,10 +1,13 @@
-module Language.Potion.Parser (parseExpression, parseFile) where
+module Language.Potion.Parser
+  ( parseExpression
+  , parse
+  ) where
 
 import Data.Functor.Identity
 
 import Control.Monad
 import Data.Maybe (catMaybes)
-import Text.Parsec
+import Text.Parsec hiding (parse)
 import Text.Parsec.Language (emptyDef)
 
 import qualified Data.Map.Strict as Map
@@ -123,12 +126,12 @@ table
     binary :: String -> (a -> a -> a) -> Exp.Assoc -> Exp.Operator String PState Identity a
     binary op f = Exp.Infix (reservedOp op >> return f)
 
-withMeta :: Parser Expression -> Parser Expression
-withMeta p
+withPos :: Parser Expression -> Parser Expression
+withPos p
   = do
     pos <- getPosition
     exp <- p
-    return $ putMeta (metaFromPos pos) exp
+    return $ putPos (Pos pos) exp
 
 literal :: Parser Literal
 literal
@@ -146,16 +149,16 @@ literal
     bool    = true <|> false
 
 literalExp :: Parser Expression
-literalExp = withMeta $ eLit <$> literal
+literalExp = withPos $ eLit <$> literal
 
 identifier :: Parser Name
 identifier = Token.identifier lexer <?> "identifier"
 
 nameExp :: Parser Expression
-nameExp = withMeta $ eName <$> identifier
+nameExp = withPos $ eName <$> identifier
 
 holeExp :: Parser Expression
-holeExp = withMeta (symbol "_" >> return eHole <?> "hole")
+holeExp = withPos (symbol "_" >> return eHole <?> "hole")
 
 param :: Parser Expression
 param = nameExp <|> holeExp <?> "parameter"
@@ -164,7 +167,7 @@ fatArrow = reservedOp "=>"
 pipe     = symbol "|"
 
 funExp :: Parser Expression
-funExp = withMeta (symbol "#" >> choice [shorFun, fun] <?> "function")
+funExp = withPos (symbol "#" >> choice [shorFun, fun] <?> "function")
   where
     fun = do
       params <- parens (commaSep param) <?> "parameters"
@@ -177,12 +180,12 @@ funExp = withMeta (symbol "#" >> choice [shorFun, fun] <?> "function")
       return $ eFun [eHole] body
 
 listExp :: Parser Expression
-listExp = withMeta $ eOp "[]" <$> list
+listExp = withPos $ eOp "[]" <$> list
   where
     list = brackets (commaSep expression) <?> "list"
 
 tupleExp :: Parser Expression
-tupleExp = withMeta tuple <?> "tuple"
+tupleExp = withPos tuple <?> "tuple"
   where
     tuple = do
       xs <- parens (commaSep expression)
@@ -191,7 +194,7 @@ tupleExp = withMeta tuple <?> "tuple"
         xs' -> return $ eOp "()" xs'
 
 pair :: Parser Expression
-pair = withMeta keyvalue <?> "pair"
+pair = withPos keyvalue <?> "pair"
   where
     keyvalue = do
       key <- expression
@@ -208,11 +211,11 @@ elements on = do
   return $ eOp "{}" (on:elems)
 
 mapExp :: Parser Expression
-mapExp = withMeta (elements eHole) <?> "map"
+mapExp = withPos (elements eHole) <?> "map"
 
 blockTill :: Parser () -> Parser Expression
 blockTill end
-  = withMeta blk <?> "block"
+  = withPos blk <?> "block"
   where
     blk = do
       exps <- manyTill expression end
@@ -222,7 +225,7 @@ blockTill end
 
 block :: Parser Expression
 block
-  = withMeta blk <?> "block"
+  = withPos blk <?> "block"
   where
     blk = do
       exps <- many1 expression
@@ -231,7 +234,7 @@ block
         _     -> return $ eOp "%block%" exps
 
 matchExp :: Parser Expression
-matchExp = withMeta match <?> "match"
+matchExp = withPos match <?> "match"
   where
     match = do
       reserved "match"
@@ -257,94 +260,8 @@ caseExp
       pred <- expression
       return (pat, pred)
 
-ifExp :: Parser Expression
-ifExp = withMeta ifThen <?> "if"
-  where
-    ifThen = do
-      reserved "if"
-      predicate <- expression
-      onTrue <- block
-      reserved "else"
-      onFalse <- block
-      optional $ reserved "end"
-      return $ eOp "if" [predicate, onTrue, onFalse]
-
-syntax :: Parser (Parser Expression)
-syntax
-  = do
-    nameP <- sym
-    argsP <- manyTill syntaxTerm (reserved "end")
-    return $ builder nameP argsP
-  where
-    syntaxTerm :: Parser (Parser (Either String Expression))
-    syntaxTerm = exp <|> sym
-
-    builder :: Parser (Either String Expression) -> [Parser (Either String Expression)] -> Parser Expression
-    builder nameP partsP = do
-      Left name <- nameP
-      args <- concatMap (either (const []) return) <$> sequence partsP
-      return $ eOp name args
-
-    ss = lexeme $ try $ char ':' >> many1 letter
-
-    sym :: Parser (Parser (Either String Expression))
-    sym = do
-      s <- ss
-      return (Left <$> symbol s <?> s)
-
-    exp :: Parser (Parser (Either String Expression))
-    exp = do
-      symbol "%"
-      ty <- choice (map symbol ["exp", "block"])
-      case ty of
-        "exp"   -> return (Right <$> expression)
-        "block" -> do
-          end <- ss
-          return (Right <$> blockTill (symbol end >> return ()))
-        -- "end"   -> return (const (Left "end") <$> reserved "end")
-    -- syntaxParser :: Parser String -> Parser [Maybe Expression] -> Parser Expression
-    -- syntaxParser nameP argsP = do
-    --   name <- nameP
-    --   args <- argsP
-    --   return $ eOp name (catMaybes args)
-
-    -- sterms :: Parser [Maybe Expression] -> Parser (Parser [Maybe Expression])
-    -- -- sterms p = return $ sjoin p $ option (return []) (sterms $ return sterm)
-    -- sterms p = return p
-
-    -- sjoin :: Parser [Maybe Expression] -> Parser [Maybe Expression] -> Parser [Maybe Expression]
-    -- sjoin p1 p2 = do
-    --   xs1 <- p1
-    --   xs2 <- p2
-    --   return $ xs1 ++ xs2
-
-    -- sterm :: Parser (Parser [Maybe Expression])
-    -- sterm = exp <|> exps <|> symTerm
-
-    -- symTerm :: Parser (Parser [Maybe Expression])
-    -- symTerm = sym >> return [Nothing]
-
-
-    -- -- opt :: Parser [Maybe Expression]
-    -- -- opt = symbol "?" >> return $ optional sterm
-
-    -- exp :: Parser (Parser [Maybe Expression])
-    -- exp = symbol "%exp" >> (\x -> [Just x]) <$> expression
-
-    -- exps :: Parser (Parser [Maybe Expression])
-    -- exps = symbol "%exp..." >> map Just <$> many1 expression
-
-syntaxExp :: Parser Expression
-syntaxExp = do
-  symbol "syntax"
-  p <- syntax
-  res <- p
-  return res
-
 term :: Parser Expression
 term
-  -- get state
-  -- build parser
   =   try literalExp
   <|> nameExp
   <|> funExp
@@ -353,12 +270,11 @@ term
   <|> tupleExp
   <|> mapExp
   <|> matchExp
-  <|> ifExp
   <?> "term"
 
 arguments :: Expression -> Parser Expression
 arguments f
-  = withMeta args <?> "arguments"
+  = withPos args <?> "arguments"
   where
     args = do
       args <- parens (commaSep expression)
@@ -366,7 +282,7 @@ arguments f
 
 slice :: Expression -> Parser Expression
 slice arr
-  = withMeta (brackets $ try slc <|> idx) <?> "slice"
+  = withPos (brackets $ try slc <|> idx) <?> "slice"
   where
     idx = do
       index <- expression
@@ -388,17 +304,14 @@ operand = term >>= composite <?> "composite-expression"
 
 expression :: Parser Expression
 expression
-  -- get state
-  -- build infixtable
   = Exp.buildExpressionParser table operand <?> "expression"
 
-funDef :: SourcePos -> Parser Definition
+funDef :: Pos -> Parser Definition
 funDef pos
   = do
     params <- parens (commaSep param) <?> "parameters"
     body <- choice [shortBody, longBody] <?> "body"
-    let meta = metaFromPos pos
-    return $ DFun meta $ EFun meta params body
+    return $ DFun pos $ EFun pos params body
   where
     shortBody = reservedOp "=" >> expression
     longBody = do
@@ -409,17 +322,17 @@ funDef pos
 definition :: Parser (Name, Definition)
 definition
   = do
-    pos <- getPosition
-    reserved "def"
+    pos <- Pos <$> getPosition
+    reserved "define"
     name <- identifier
     def <- funDef pos -- <|> sigDef <|> foreignDef
     return (name, def)
 
-file :: Name -> Parser SourceFile
-file name
+code :: Name -> Parser Code
+code name
   = do
-    code <- many definition
-    return $ File name $ Map.fromList code
+    defs <- contents $ many definition
+    return $ Code name $ Map.fromList defs
 
 contents :: Parser a -> Parser a
 contents p
@@ -431,12 +344,9 @@ contents p
 
 parseExpression :: String -> Either ParseError Expression
 parseExpression
-  = runParser (contents syntaxExp) emptyPState "<stdin>"
+  = runParser (contents expression) emptyPState "<stdin>"
 
-parseFile :: Name -> String -> Either ParseError Expression
-parseFile name
-  = runParser (contents syntaxExp) emptyPState name
+parse :: Name -> String -> Either ParseError Code
+parse name
+  = runParser (code name) emptyPState name
 
--- parseFile :: Name -> String -> Either ParseError SourceFile
--- parseFile name
---   = runParser (contents $ file name) emptyPState name
