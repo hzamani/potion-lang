@@ -103,7 +103,7 @@ symbol = Token.symbol lexer
 
 table :: Exp.OperatorTable String PState Identity Expression
 table
-  = [ [ rbin "." ]
+  = [ [ binR "." ]
     , [ pos "..."]
     , [ pre "-", pre "+" ]
     , [ bin "*", bin "/", bin "%" ]
@@ -112,20 +112,28 @@ table
     , [ bin "=" ]
     ]
   where
-    rbin op = binary  op (\x y -> eOp op [x, y]) Exp.AssocRight
-    bin op  = binary  op (\x y -> eOp op [x, y]) Exp.AssocLeft
-    pre op  = prefix  op (\x   -> eOp op [x])
-    pos op  = postfix op (\x   -> eOp op [x])
+    binR op = Exp.Infix (binaryOp op) Exp.AssocRight
+    bin op  = Exp.Infix (binaryOp op) Exp.AssocLeft
 
-    prefix :: String -> (a -> a) -> Exp.Operator String PState Identity a
-    prefix op f = Exp.Prefix (reservedOp op >> return f)
+    pre = Exp.Prefix . unaryOp
+    pos = Exp.Postfix . unaryOp
 
-    postfix :: String -> (a -> a) -> Exp.Operator String PState Identity a
-    postfix op f = Exp.Postfix (reservedOp op >> return f)
+unaryOp :: String -> Parser (Expression -> Expression)
+unaryOp op
+  = do
+    pos <- getPosition
+    reservedOp op
+    let opParser x = putPos (Pos pos) $ eOp op [x]
+    return opParser
 
-    binary :: String -> (a -> a -> a) -> Exp.Assoc -> Exp.Operator String PState Identity a
-    binary op f = Exp.Infix (reservedOp op >> return f)
-
+binaryOp :: String -> Parser (Expression -> Expression -> Expression)
+binaryOp op
+  = do
+    pos <- getPosition
+    reservedOp op
+    let opParser x y = putPos (Pos pos) $ eOp op [x, y]
+    return opParser
+    
 withPos :: Parser Expression -> Parser Expression
 withPos p
   = do
