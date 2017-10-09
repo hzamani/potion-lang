@@ -1,5 +1,6 @@
 module Language.Potion.Expand
   ( expand
+  , expandExp
   ) where
 
 import Data.Map.Strict (Map)
@@ -23,6 +24,12 @@ expandExp = eWalk expander
 expander :: Expression -> Expression
 expander (EApp _ (EName _ "%block%") exps)
   = expandBlock exps
+expander (EApp _ (EName _ ".") [ELit p (LI x), ELit _ (LI y)])
+  = ELit p (LF val)
+  where
+    val = x' + y' / 10 ** fromIntegral (ceiling $ logBase 10 y')
+    x' = fromIntegral x :: Double
+    y' = fromIntegral y :: Double
 expander exp
   = exp
 

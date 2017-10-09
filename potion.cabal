@@ -17,11 +17,13 @@ library
   hs-source-dirs:      src
   exposed-modules:     Language.Potion
                      , Language.Potion.Parser
-                     , Language.Potion.Syntax
                      , Language.Potion.REPL
+                     , Language.Potion.Syntax
+                     , Language.Potion.Core
                      , Language.Potion.Type
                      , Language.Potion.Type.Context
                      , Language.Potion.Type.Substitution
+                     , Language.Potion.Type.Infer
                      , Language.Potion.Expand
   build-depends:       base >= 4.7 && < 5
                      , parsec
