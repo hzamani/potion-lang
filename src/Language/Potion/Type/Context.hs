@@ -8,6 +8,7 @@ import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Language.Potion.Core
 import Language.Potion.Syntax
 import Language.Potion.Type
 
@@ -36,6 +37,10 @@ insertApp name ty info
   where
     oldApps = apps info
     newApps = Map.insertWith Set.union name (Set.singleton ty) oldApps
+
+unionApps :: [CExp] -> Map Name (Set Type)
+unionApps exps
+  = Map.unionsWith Set.union $ map cApps exps
 
 type Context = Map Name Info
 

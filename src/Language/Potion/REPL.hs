@@ -7,6 +7,9 @@ import System.Environment
 import System.Console.Haskeline
 
 import Language.Potion.Parser
+import Language.Potion.Expand
+import Language.Potion.Type.Context
+import Language.Potion.Type.Infer
 
 settings :: Settings IO
 settings
@@ -20,16 +23,20 @@ continuePrompt old = getInputLineWithInitial "      | " (old, "")
 
 loop reader
   = do
-    row <- reader
-    case row of
-      Nothing -> return ()
+    line <- reader
+    case line of
+      Nothing ->
+        return ()
       Just "" ->
         loop defaultPrompt
-      Just str ->
-        case parseExpression str of
-          Right exp -> do
-            outputStrLn (show exp)
-            loop defaultPrompt
-          Left err  -> do
-            outputStrLn (show err)
-            loop $ continuePrompt str
+      Just str -> do
+        case parseExp str of
+          Left e -> outputStrLn $ show e
+          Right exp -> outputStrLn $ show $ inferExp (expandExp exp) base
+        loop defaultPrompt
+          -- Right exp -> do
+          --   outputStrLn (show exp)
+          --   loop defaultPrompt
+          -- Left err  -> do
+          --   outputStrLn (show err)
+          --   loop $ continuePrompt str

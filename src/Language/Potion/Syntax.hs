@@ -85,7 +85,7 @@ ePos (EHole pos)       = pos
 putPos :: Pos -> Expression -> Expression
 putPos p (EApp _ f as)   = EApp p f as
 putPos p (EFun _ ps e)   = EFun p ps e
-putPos p (EMatch _ f as) = EMatch p f as
+putPos p (EMatch _ e cs) = EMatch p e cs
 putPos p (ECase _ x y z) = ECase p x y z
 putPos p (ELit _ v)      = ELit p v
 putPos p (EName _ n)     = EName p n

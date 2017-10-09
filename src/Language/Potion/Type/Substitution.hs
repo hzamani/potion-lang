@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Language.Potion.Core
 import Language.Potion.Syntax
 import Language.Potion.Type
 import Language.Potion.Type.Context
@@ -47,6 +48,28 @@ instance Substitutable Scheme where
 instance Substitutable Info where
   apply sub info = info{ scheme = apply sub $ scheme info }
   free = free . scheme
+
+instance Substitutable CExp where
+  apply sub (CApp meta f args)
+    = CApp (apply sub meta) (apply sub f) (apply sub args)
+  apply sub (CFun meta params exp)
+    = CFun (apply sub meta) (apply sub params) (apply sub exp)
+  apply sub (CMatch meta exp branches)
+    = CMatch (apply sub meta) (apply sub exp) (apply sub branches)
+  apply sub (CCase meta with when exp)
+    = CCase (apply sub meta) (apply sub with) (apply sub when) (apply sub exp)
+  apply sub (CLit meta lit)
+    = CLit (apply sub meta) lit
+  apply sub (CName meta name)
+    = CName (apply sub meta) name
+  apply sub (CHole meta)
+    = CHole (apply sub meta)
+
+  free exp = free $ cMeta exp
+
+instance Substitutable Meta where
+  apply sub meta = meta{ mType = apply sub $ mType meta, mApps = apply sub $ mApps meta }
+  free meta = free $ mType meta
 
 instance Substitutable a => Substitutable [a] where
   apply = fmap . apply

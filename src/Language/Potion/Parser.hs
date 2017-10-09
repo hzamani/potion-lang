@@ -1,6 +1,6 @@
 module Language.Potion.Parser
-  ( parseExpression
-  , parse
+  ( parse
+  , parseExp
   ) where
 
 import Data.Functor.Identity
@@ -121,19 +121,19 @@ table
 unaryOp :: String -> Parser (Expression -> Expression)
 unaryOp op
   = do
-    pos <- getPosition
+    pos <- Pos <$> getPosition
     reservedOp op
-    let opParser x = putPos (Pos pos) $ eOp op [x]
+    let opParser x = EApp pos (EName pos $ op ++ "/1") [x]
     return opParser
 
 binaryOp :: String -> Parser (Expression -> Expression -> Expression)
 binaryOp op
   = do
-    pos <- getPosition
+    pos <- Pos <$> getPosition
     reservedOp op
-    let opParser x y = putPos (Pos pos) $ eOp op [x, y]
+    let opParser x y = EApp pos (EName pos op) [x, y]
     return opParser
-    
+
 withPos :: Parser Expression -> Parser Expression
 withPos p
   = do
@@ -350,8 +350,8 @@ contents p
     eof
     return result
 
-parseExpression :: String -> Either ParseError Expression
-parseExpression
+parseExp :: String -> Either ParseError Expression
+parseExp
   = runParser (contents expression) emptyPState "<stdin>"
 
 parse :: Name -> String -> Either ParseError Code

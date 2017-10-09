@@ -4,7 +4,7 @@ import System.Exit
 
 import Language.Potion.Parser
 import Language.Potion.Expand
--- import Language.Potion.Type.Infer
+import Language.Potion.Type.Infer
 
 exitOnError :: Show e => Either e a -> IO a
 exitOnError (Right val)
