@@ -340,7 +340,7 @@ code :: Name -> Parser Code
 code name
   = do
     defs <- contents $ many definition
-    return $ Code name $ Map.fromList defs
+    return $ Code name defs
 
 contents :: Parser a -> Parser a
 contents p

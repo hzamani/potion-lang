@@ -3,6 +3,8 @@ module Language.Potion.Expand
   , expandExp
   ) where
 
+import Control.Arrow (second)
+
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
@@ -10,7 +12,7 @@ import Language.Potion.Syntax
 
 expand :: Code -> Code
 expand (Code file defs)
-  = Code file $ Map.map expandDef defs
+  = Code file $ map (second expandDef) defs
 
 expandDef :: Definition -> Definition
 expandDef (DFun meta exp)

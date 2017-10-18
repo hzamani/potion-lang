@@ -12,7 +12,6 @@ import qualified Data.Set as Set
 import Language.Potion.Core
 import Language.Potion.Syntax
 import Language.Potion.Type
-import Language.Potion.Type.Context
 
 newtype Substitution
   = Sub (Map TVar Type)
@@ -44,10 +43,6 @@ instance Substitutable Scheme where
       sub = Sub $ foldr Map.delete s vars
 
   free (Forall vars t) = Set.difference (free t) (Set.fromList vars)
-
-instance Substitutable Info where
-  apply sub info = info{ scheme = apply sub $ scheme info }
-  free = free . scheme
 
 instance Substitutable CExp where
   apply sub (CApp meta f args)

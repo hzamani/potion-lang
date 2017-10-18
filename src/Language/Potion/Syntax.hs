@@ -70,7 +70,7 @@ data Definition
   deriving (Eq, Show)
 
 data Code
-  = Code Name (Map Name Definition)
+  = Code Name [(Name, Definition)]
   deriving (Eq, Show)
 
 ePos :: Expression -> Pos

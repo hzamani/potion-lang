@@ -1,5 +1,6 @@
 module Language.Potion.Type.Infer
   ( inferExp
+  , inferCode
   ) where
 
 import Control.Monad.Except
@@ -57,7 +58,25 @@ type Unifier
 type Solve a
   = ExceptT InferError Identity a
 
-inferExp :: Expression -> Context -> Either InferError (CExp, Scheme)
+inferCode :: Code -> Context -> Either InferError Context
+inferCode (Code _ defs) ctx
+  = foldl step (Right ctx) defs
+  where
+    step (Right ctx) (name, DFun pos fun) =
+      case inferExp fun ctx of
+        Left err  -> Left err
+        Right def -> Right $ insertDef name def ctx
+    step res _ = res
+
+insertVariants :: Name -> Set Type -> Context -> Context
+insertVariants name ty
+  = Map.adjust (insertVariant ty) name
+  where
+    insertVariant ty def = def{ dVariants = Set.filter noFree ty `Set.union` dVariants def }
+    noFree = (0 ==) . Set.size . free
+
+
+inferExp :: Expression -> Context -> Either InferError Def
 inferExp exp ctx
   = mapRight (canonicalize ctx) $ solve $ runInfer ctx $ infer exp
 
@@ -101,6 +120,13 @@ infer (EFun p params exp)
     let meta = noMeta{ mPos = p, mType = fun, mApps = cApps body }
     return (CFun meta vars body, cs ++ [CT p ty fun])
 
+-- infer (EApp pa (EN pt "%then%") [exp, rest])
+--   = do
+--     (cExp, fExp) <- infer exp
+--     (cRest, fRest) <- infer rest
+--     let meta = noMeta { mPos = p, mType = cType cRest, mApps = unionApps [cExp, cRest] }
+--         return (CApp meta 
+
 infer (EApp p f args)
   = do
     (cF, fCs) <- infer f
@@ -142,7 +168,7 @@ withVars vars
   = local scope
   where
     scope ctx = foldl' ext ctx vars
-    ext ctx (CName meta name) = (name, Forall [] (mType meta)) `extend` ctx
+    ext ctx (CName meta name) = extend (name, Forall [] (mType meta)) ctx
     ext ctx _ = ctx
 
 lookupContext :: Name -> Infer (Maybe Meta)
@@ -150,9 +176,10 @@ lookupContext name
   = do
     ctx <- ask
     case Map.lookup name ctx of
-      Just Info{ scheme = s@(Forall _ t), apps = as } -> do
+      Just Def{ dScheme = s@(Forall _ t), dExp = exp} -> do
         sub <- instantiator s
-        return $ Just noMeta{ mType = apply sub t, mApps = apply sub as }
+        let t' = apply sub t
+        return $ Just noMeta{ mType = t', mApps = apply sub $ insertApp name t' $ cApps exp }
       Nothing ->
         return Nothing
 
@@ -164,13 +191,16 @@ instantiator (Forall vars ty)
     vars' <- mapM (const fresh) vars
     return $ Sub $ Map.fromList $ zip vars vars'
 
-canonicalize :: Context -> CExp -> (CExp, Scheme)
+canonicalize :: Context -> CExp -> Def
 canonicalize ctx exp
-  = normalize (exp, generalize ctx $ cType exp)
+  = normalize emptyDef
+    { dScheme = generalize ctx $ cType exp
+    , dExp = exp
+    }
 
-normalize :: (CExp, Scheme) -> (CExp, Scheme)
-normalize (exp, Forall vars ty)
-  = (apply sub exp, scheme)
+normalize :: Def -> Def
+normalize def@Def{ dScheme = Forall vars ty, dExp = exp }
+  = def{ dScheme = scheme, dExp = apply sub exp }
   where
     scheme = Forall (snd <$> cs) (apply sub ty)
     fs = free ty

@@ -21,6 +21,14 @@ repl = runInputT settings $ loop defaultPrompt
 defaultPrompt = getInputLine "Potion> "
 continuePrompt old = getInputLineWithInitial "      | " (old, "")
 
+process :: String -> IO ()
+process line
+  = case parseExp line of
+      Left err  -> print err
+      Right exp -> do
+        print exp
+        print $ inferExp (expandExp exp) base
+
 loop reader
   = do
     line <- reader
@@ -29,14 +37,6 @@ loop reader
         return ()
       Just "" ->
         loop defaultPrompt
-      Just str -> do
-        case parseExp str of
-          Left e -> outputStrLn $ show e
-          Right exp -> outputStrLn $ show $ inferExp (expandExp exp) base
+      Just input -> do
+        liftIO $ process input
         loop defaultPrompt
-          -- Right exp -> do
-          --   outputStrLn (show exp)
-          --   loop defaultPrompt
-          -- Left err  -> do
-          --   outputStrLn (show err)
-          --   loop $ continuePrompt str

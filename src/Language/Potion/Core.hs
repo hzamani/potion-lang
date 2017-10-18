@@ -27,6 +27,9 @@ putPos pos meta   = meta{ mPos = pos }
 putApps apps meta = meta{ mApps = apps }
 putType ty meta   = meta{ mType = ty }
 
+insertApp :: Name -> Type -> Map Name (Set Type) -> Map Name (Set Type)
+insertApp name ty = Map.insertWith Set.union name (Set.singleton ty)
+
 fromPos pos = putPos pos noMeta
 
 data CExp
@@ -37,6 +40,7 @@ data CExp
   | CLit Meta Literal
   | CName Meta Name
   | CHole Meta
+  | CForeign Meta Name
   deriving (Eq, Show)
 
 cMeta :: CExp -> Meta
@@ -50,3 +54,5 @@ cMeta (CHole m)       = m
 
 cType = mType . cMeta
 cApps = mApps . cMeta
+
+noExp = CHole noMeta

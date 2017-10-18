@@ -5,6 +5,7 @@ import System.Exit
 import Language.Potion.Parser
 import Language.Potion.Expand
 import Language.Potion.Type.Infer
+import Language.Potion.Type.Context (base)
 
 exitOnError :: Show e => Either e a -> IO a
 exitOnError (Right val)
@@ -25,9 +26,10 @@ compile file
     let expanded = expand code
     print expanded
     putStrLn "-----------------------------------------------"
-    -- context <- exitOnError $ infer expanded baseContext
-    -- print context
+    context <- exitOnError $ inferCode expanded base
+    print context
     -- putStrLn "-----------------------------------------------"
     -- generated <- exitOnError $ codegen context
     -- print generated
     -- putStrLn "-----------------------------------------------"
+
